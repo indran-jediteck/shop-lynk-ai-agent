@@ -15,7 +15,6 @@ npm run build
 
 # Create necessary directories
 echo "Creating directories..."
-mkdir -p dist
 mkdir -p /opt/render/project/src/dist
 
 # Copy files
@@ -30,9 +29,18 @@ else
         cp -r dist/* /opt/render/project/src/dist/ || true
     else
         echo "Error: dist directory still not found after second build attempt"
+        echo "Current directory contents:"
+        ls -la
         exit 1
     fi
 fi
+
+# Copy package.json and package-lock.json
+cp package.json package-lock.json /opt/render/project/src/
+
+# Install dependencies in the deployment directory
+cd /opt/render/project/src
+npm install --production
 
 # Make server.js executable if it exists
 if [ -f "/opt/render/project/src/dist/server.js" ]; then
