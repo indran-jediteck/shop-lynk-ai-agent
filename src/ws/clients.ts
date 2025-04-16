@@ -1,5 +1,7 @@
-import { WebSocket as WS } from 'ws';
+import { WebSocket } from 'ws';
 import { WebSocketClient } from './types';
+
+export const activeConnections = new Map<string, WebSocket>();
 
 export class WebSocketClients {
   private clients: Map<string, WebSocketClient>;
@@ -8,7 +10,7 @@ export class WebSocketClients {
     this.clients = new Map();
   }
 
-  addClient(threadId: string, socket: WS): void {
+  addClient(threadId: string, socket: WebSocket): void {
     this.clients.set(threadId, { threadId, socket });
   }
 
@@ -22,7 +24,7 @@ export class WebSocketClients {
 
   broadcastToThread(threadId: string, message: string): void {
     const client = this.getClient(threadId);
-    if (client && client.socket.readyState === WS.OPEN) {
+    if (client && client.socket.readyState === WebSocket.OPEN) {
       client.socket.send(message);
     }
   }

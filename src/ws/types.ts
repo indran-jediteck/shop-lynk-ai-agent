@@ -8,17 +8,24 @@ export interface InitMessage {
 export interface UserMessage {
   type: 'user_message';
   message: string;
+  threadId?: string;
+  userInfo?: {
+    name: string;
+    email: string;
+  };
 }
 
 export interface NewMessage {
   type: 'new_message';
-  sender: 'user' | 'ai';
-  message: string;
+  threadId: string;
+  content: string;
+  role: 'user' | 'assistant';
 }
 
 export interface SystemMessage {
   type: 'system_message';
-  message: string;
+  threadId: string;
+  content: string;
 }
 
 export type WebSocketMessage = InitMessage | UserMessage | NewMessage | SystemMessage;

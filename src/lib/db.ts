@@ -1,59 +1,56 @@
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 
-export class Database {
-  private static instance: Database;
-  private isConnected: boolean = false;
+dotenv.config();
 
-  private constructor() {}
+const MONGODB_URI = process.env.MONGODB_URI;
 
-  public static getInstance(): Database {
-    if (!Database.instance) {
-      Database.instance = new Database();
-    }
-    return Database.instance;
+if (!MONGODB_URI) {
+  throw new Error('MONGODB_URI environment variable is not set');
+}
+
+// Store Config Schema
+const storeConfigSchema = new mongoose.Schema({
+  shop: { type: String, required: true, unique: true },
+  styles: {
+    primaryColor: String,
+    secondaryColor: String,
+    fontFamily: String,
+    // Add other style properties as needed
   }
+});
 
-  public async connect(): Promise<void> {
-    if (this.isConnected) {
-      return;
-    }
+// Message Schema
+const messageSchema = new mongoose.Schema({
+  email: { type: String, required: true },
+  threadId: { type: String, required: true },
+  content: { type: String, required: true },
+  from: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now }
+});
 
-    try {
-      const mongoUri = process.env.MONGODB_URI;
-      if (!mongoUri) {
-        throw new Error('MONGODB_URI environment variable is not set');
-      }
+export const StoreConfig = mongoose.model('StoreConfig', storeConfigSchema);
+export const Message = mongoose.model('Message', messageSchema);
 
-      await mongoose.connect(mongoUri);
-      this.isConnected = true;
-      console.log('Connected to MongoDB');
-
-      mongoose.connection.on('error', (err) => {
-        console.error('MongoDB connection error:', err);
-      });
-
-      mongoose.connection.on('disconnected', () => {
-        this.isConnected = false;
-        console.log('Disconnected from MongoDB');
-      });
-    } catch (error) {
-      console.error('Error connecting to MongoDB:', error);
-      throw error;
-    }
+export async function connectToDatabase() {
+  try {
+    await mongoose.connect(MONGODB_URI as string);
+    console.log('Connected to MongoDB');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    throw error;
   }
+}
 
-  public async disconnect(): Promise<void> {
-    if (!this.isConnected) {
-      return;
-    }
+export async function getStoreConfig(shop: string) {
+  return StoreConfig.findOne({ shop });
+}
 
-    try {
-      await mongoose.disconnect();
-      this.isConnected = false;
-      console.log('Disconnected from MongoDB');
-    } catch (error) {
-      console.error('Error disconnecting from MongoDB:', error);
-      throw error;
-    }
-  }
+export async function saveMessage(email: string, content: string, from: string) {
+  return Message.create({
+    email,
+    threadId: email, // Using email as threadId for simplicity
+    content,
+    from
+  });
 } 

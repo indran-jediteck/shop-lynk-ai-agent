@@ -1,77 +1,91 @@
 # Lynk Agent Chat
 
-A real-time AI chat system with WebSocket support, designed for Shopify storefronts with Discord integration.
+A real-time AI chat application with WebSocket support, built with Node.js, TypeScript, Express, and OpenAI.
 
 ## Features
 
-- Real-time chat using WebSocket
-- OpenAI Assistant integration
-- Discord webhook support
+- Real-time chat using WebSockets
+- OpenAI Assistant API integration
 - MongoDB for data persistence
-- Customizable chat styles per Shopify store
+- Discord webhook support
+- Store-specific styling configuration
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js (v14 or higher)
 - MongoDB
 - OpenAI API key
 - OpenAI Assistant ID
 
 ## Setup
 
-1. Clone the repository
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/lynk-agent-chat.git
+cd lynk-agent-chat
+```
+
 2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Copy `.env.example` to `.env` and fill in your environment variables
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
+```bash
+npm install
+```
 
-## Environment Variables
+3. Create a `.env` file based on `.env.example`:
+```bash
+cp .env.example .env
+```
 
-- `MONGODB_URI`: MongoDB connection string
-- `OPENAI_API_KEY`: Your OpenAI API key
-- `OPENAI_ASSISTANT_ID`: Your OpenAI Assistant ID
-- `PORT`: Server port (default: 3000)
+4. Update the `.env` file with your configuration:
+- Set your MongoDB connection string
+- Add your OpenAI API key
+- Add your OpenAI Assistant ID
+
+5. Start the development server:
+```bash
+npm run dev
+```
+
+## Project Structure
+
+```
+src/
+├── api/
+│   ├── styles.ts         # Store style configuration API
+│   └── webhook-discord.ts # Discord webhook handler
+├── lib/
+│   ├── db.ts            # MongoDB connection and models
+│   └── openai.ts        # OpenAI API integration
+├── ws/
+│   ├── clients.ts       # WebSocket client tracking
+│   ├── handler.ts       # WebSocket message handling
+│   └── types.ts         # WebSocket message types
+└── server.ts            # Main application entry point
+```
 
 ## API Endpoints
 
-### WebSocket
-- Connect to `ws://localhost:3000`
-- Send `{ type: 'init', threadId: 'your-thread-id' }` to initialize
-- Send `{ type: 'user_message', message: 'your message' }` to chat
+- `GET /health` - Health check endpoint
+- `GET /api/styles?shop={shop}` - Get store-specific styles
+- `POST /api/webhook-discord` - Handle Discord webhook messages
 
-### REST API
-- `GET /api/styles?shop=your-store.myshopify.com`: Get chat styles
-- `POST /api/webhook/discord`: Discord webhook endpoint
-  ```json
-  {
-    "email": "user@example.com",
-    "message": "Hello from Discord",
-    "from": "Discord User"
-  }
-  ```
-- `GET /health`: Health check endpoint
+## WebSocket Messages
 
-## Development
+### Client to Server
+- `init` - Initialize a new chat session
+- `user_message` - Send a message to the AI assistant
 
-```bash
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-```
+### Server to Client
+- `new_message` - New message from AI or user
+- `system_message` - System notifications
 
 ## Deployment
 
-The application is designed to be deployed on Render. Make sure to set up all environment variables in your Render dashboard.
+The application is designed to be deployed on Render.com. Make sure to set up the following environment variables in your Render dashboard:
+
+- `MONGODB_URI`
+- `OPENAI_API_KEY`
+- `OPENAI_ASSISTANT_ID`
+- `PORT` (optional, defaults to 3000)
 
 ## License
 

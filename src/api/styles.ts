@@ -1,40 +1,25 @@
-import { Router } from 'express';
-import mongoose from 'mongoose';
+import { Express } from 'express';
+import { getStoreConfig } from '../lib/db';
 
-const router = Router();
+export function setupStylesRoute(app: Express) {
+  app.get('/api/styles', async (req, res) => {
+    try {
+      const { shop } = req.query;
+      
+      if (!shop || typeof shop !== 'string') {
+        return res.status(400).json({ error: 'Shop parameter is required' });
+      }
 
-// Define the store config schema
-const storeConfigSchema = new mongoose.Schema({
-  shop: String,
-  styles: {
-    primaryColor: String,
-    secondaryColor: String,
-    fontFamily: String,
-    // Add other style properties as needed
-  }
-});
+      const config = await getStoreConfig(shop);
+      
+      if (!config) {
+        return res.status(404).json({ error: 'Store configuration not found' });
+      }
 
-const StoreConfig = mongoose.model('StoreConfig', storeConfigSchema);
-
-router.get('/styles', async (req, res) => {
-  try {
-    const { shop } = req.query;
-    
-    if (!shop) {
-      return res.status(400).json({ error: 'Shop parameter is required' });
+      res.json(config.styles);
+    } catch (error) {
+      console.error('Error fetching store styles:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
-
-    const config = await StoreConfig.findOne({ shop });
-    
-    if (!config) {
-      return res.status(404).json({ error: 'Store configuration not found' });
-    }
-
-    res.json(config.styles);
-  } catch (error) {
-    console.error('Error fetching styles:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-export default router; 
+  });
+} 

@@ -514,6 +514,67 @@
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
+  // Function to create quick action buttons
+  function createQuickActionButtons() {
+    const actions = [
+      { text: 'Check my order', prompt: 'Can you help me check the status of my order?' },
+      { text: 'Product question', prompt: 'I have a question about a product' },
+      { text: 'Schedule appointment', prompt: 'I would like to schedule an appointment' },
+      { text: 'Return/Exchange', prompt: 'I need help with a return or exchange' },
+      { text: 'Store hours', prompt: 'What are your store hours?' },
+      { text: 'Contact support', prompt: 'I need to speak with customer support' }
+    ];
+
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    `;
+
+    actions.forEach(action => {
+      const button = document.createElement('button');
+      button.textContent = action.text;
+      button.style.cssText = `
+        padding: 8px 12px;
+        background: #E3F2FD;
+        color: #1565C0;
+        border: none;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+      `;
+      button.onmouseover = () => {
+        button.style.background = '#1565C0';
+        button.style.color = 'white';
+      };
+      button.onmouseout = () => {
+        button.style.background = '#E3F2FD';
+        button.style.color = '#1565C0';
+      };
+      button.onclick = () => {
+        input.value = action.prompt;
+        sendButton.click();
+      };
+      buttonsContainer.appendChild(button);
+    });
+
+    return buttonsContainer;
+  }
+
+  // Function to show welcome message
+  function showWelcomeMessage() {
+    const firstName = userInfo.name.split(' ')[0] || 'there';
+    const welcomeMessage = `Hi ${firstName}! 👋 I'm your AI assistant. How can I help you today?`;
+    addMessage(welcomeMessage, 'ai');
+    
+    const buttonsContainer = createQuickActionButtons();
+    const lastMessage = messagesContainer.lastElementChild;
+    lastMessage.appendChild(buttonsContainer);
+  }
+
   // Function to show user info form
   function showUserInfoForm() {
     userInfoForm.style.display = 'flex';
@@ -542,7 +603,7 @@
     showUserInfoForm();
   });
 
-  // Handle form submission instead of button click
+  // Update the form submission handler to show welcome message
   document.getElementById('chat-user-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     
@@ -560,6 +621,7 @@
       localStorage.setItem('chatUserInfo', JSON.stringify(userInfo));
       console.log('Saved user info:', userInfo);
       hideUserInfoForm();
+      showWelcomeMessage();
     } else {
       alert('Please provide both name and email');
     }
@@ -575,6 +637,13 @@
 
     ws.onopen = () => {
       console.log('WebSocket connected');
+      // Show welcome message when connection is established
+      if (userInfo.name) {
+        showWelcomeMessage();
+      } else {
+        showUserInfoForm();
+      }
+      
       if (threadId) {
         ws.send(JSON.stringify({
           type: 'init',
@@ -588,7 +657,8 @@
         const data = JSON.parse(event.data);
         if (data.type === 'new_message') {
           addMessage(data.message, data.sender);
-        } else if (data.type === 'system_message') {
+        } else if (data.type === 'system_message' && !data.message.includes('Connection established')) {
+          // Only show system messages that aren't connection established
           addMessage(data.message, 'system');
         }
       } catch (error) {
@@ -649,10 +719,27 @@
     addMessage(message, 'user');
     input.value = '';
 
+    // Get user info from localStorage and validate
+    let userInfo = { name: '', email: '' };
+    try {
+      const storedInfo = localStorage.getItem('chatUserInfo');
+      if (storedInfo) {
+        userInfo = JSON.parse(storedInfo);
+        if (!userInfo.name || !userInfo.email) {
+          console.warn('Invalid user info in localStorage');
+          userInfo = { name: '', email: '' };
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user info:', error);
+    }
+
     // Send message through WebSocket
     ws.send(JSON.stringify({
       type: 'user_message',
-      message: message
+      message: message,
+      threadId: threadId,
+      userInfo: userInfo
     }));
   };
 
