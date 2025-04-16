@@ -13,7 +13,11 @@ const server = http.createServer(app);
 
 // Middleware
 app.use(cors());
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(express.json());
 
 // Health check route
@@ -23,10 +27,18 @@ app.get('/health', (req, res) => {
 
 // Static files
 app.use(express.static(path.join(__dirname, '../public'), {
-  setHeaders: (res) => {
+  setHeaders: (res, filePath) => {
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.set('Content-Type', 'application/javascript');
+    
+    // Set content type based on file extension
+    if (filePath.endsWith('.js')) {
+      res.set('Content-Type', 'application/javascript');
+    } else if (filePath.endsWith('.html')) {
+      res.set('Content-Type', 'text/html');
+    } else if (filePath.endsWith('.css')) {
+      res.set('Content-Type', 'text/css');
+    }
   }
 }));
 

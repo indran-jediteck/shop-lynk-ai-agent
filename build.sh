@@ -5,8 +5,8 @@ set -e
 
 echo "Starting build process..."
 
-# Install dependencies
-echo "Installing dependencies..."
+# Install all dependencies (including dev dependencies for build)
+echo "Installing all dependencies..."
 npm install
 
 # Build TypeScript
@@ -22,7 +22,7 @@ if [ ! -d "dist" ]; then
     exit 1
 fi
 
-# Install production dependencies
+# Install production dependencies only
 echo "Installing production dependencies..."
 npm install --production
 
