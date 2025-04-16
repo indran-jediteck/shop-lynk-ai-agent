@@ -2,12 +2,12 @@
   "name": "lynk-agent-chat",
   "version": "1.0.0",
   "description": "Real-time AI chat system with WebSocket support",
-  "main": "src/dist/server.js",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node src/dist/server.js",
+    "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "render-build": "npm install && npm run build",
+    "render-build": "chmod +x build.sh && ./build.sh",
     "test": "jest"
   },
   "dependencies": {
