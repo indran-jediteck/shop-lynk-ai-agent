@@ -29,12 +29,12 @@ export async function processUserMessage(threadId: string, content: string): Pro
     const openaiThreadId = await openaiService.getOrCreateThread(threadId);
     const response = await openaiService.sendMessage(openaiThreadId, content);
     return response;
-    return 'This is a test response from the AI assistant.';
-
-
   } catch (error) {
     console.error('Error processing message:', error);
-    return 'An error occurred while processing your message.';
+    if (error instanceof Error) {
+      return `I apologize, but I encountered an error: ${error.message}. Please try again or rephrase your message.`;
+    }
+    return 'I apologize, but I encountered an error processing your message. Please try again.';
   }
 }
 
@@ -64,30 +64,69 @@ export class OpenAIService {
   }
 
   public async sendMessage(threadId: string, message: string): Promise<string> {
-    // Add message to thread
-    await this.client.beta.threads.messages.create(threadId, {
-      role: 'user',
-      content: message,
-    });
+    try {
+      // Add message to thread
+      await this.client.beta.threads.messages.create(threadId, {
+        role: 'user',
+        content: message,
+      });
 
-    // Create and run
-    const run = await this.client.beta.threads.runs.create(threadId, {
-      assistant_id: this.assistantId,
-    });
+      // Create and run
+      const run = await this.client.beta.threads.runs.create(threadId, {
+        assistant_id: this.assistantId,
+      });
 
-    // Wait for completion
-    let runStatus = await this.client.beta.threads.runs.retrieve(threadId, run.id);
-    while (runStatus.status !== 'completed') {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      runStatus = await this.client.beta.threads.runs.retrieve(threadId, run.id);
+      // Wait for completion with timeout
+      const maxAttempts = 30; // 30 seconds timeout
+      let attempts = 0;
+      let runStatus = await this.client.beta.threads.runs.retrieve(threadId, run.id);
+      
+      while (runStatus.status !== 'completed' && attempts < maxAttempts) {
+        if (runStatus.status === 'failed') {
+          throw new Error('Assistant run failed: ' + runStatus.last_error?.message);
+        }
+        if (runStatus.status === 'expired') {
+          throw new Error('Assistant run expired');
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        runStatus = await this.client.beta.threads.runs.retrieve(threadId, run.id);
+        attempts++;
+      }
+
+      if (attempts >= maxAttempts) {
+        throw new Error('Response timeout: The assistant took too long to respond');
+      }
+
+      // Get the assistant's response
+      const messages = await this.client.beta.threads.messages.list(threadId);
+      const assistantMessage = messages.data.find(m => m.role === 'assistant');
+      
+      if (!assistantMessage) {
+        throw new Error('No response received from assistant');
+      }
+
+      // Process all content blocks
+      let responseText = '';
+      for (const content of assistantMessage.content) {
+        if (isTextContent(content)) {
+          responseText += content.text.value + '\n';
+        }
+      }
+
+      // Clean up the response
+      responseText = responseText.trim();
+      console.log('Assistant response:', responseText);
+
+      if (!responseText) {
+        throw new Error('Empty response from assistant');
+      }
+
+      return responseText;
+    } catch (error) {
+      console.error('Error in sendMessage:', error);
+      throw error; // Re-throw to be handled by processUserMessage
     }
-
-    // Get the assistant's response
-    const messages = await this.client.beta.threads.messages.list(threadId);
-    const assistantMessage = messages.data.find(m => m.role === 'assistant');
-    const textContent = assistantMessage?.content.find(isTextContent);
-    
-    return textContent?.text.value || 'No response from assistant';
   }
 
   public async getOrCreateThread(threadId: string): Promise<string> {

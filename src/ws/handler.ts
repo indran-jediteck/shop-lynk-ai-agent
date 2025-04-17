@@ -10,24 +10,18 @@ dotenv.config();
 async function sendToDiscord(message: string, sender: string, threadId: string, userInfo?: { name: string; email: string }) {
   if (!process.env.DISCORD_WEBHOOK_URL) return;
   
-  try {
-    const userDetails = userInfo ? `\n**User:** ${userInfo.name} (${userInfo.email})` : '';
-    const response = await fetch(process.env.DISCORD_WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        content: `**${sender}** (Thread: ${threadId})${userDetails}:\n${message}`,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Discord webhook error: ${response.statusText}`);
-    }
-  } catch (error) {
+  // Fire and forget - don't await the Discord webhook
+  fetch(process.env.DISCORD_WEBHOOK_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      content: `**${sender}** (Thread: ${threadId})${userInfo ? `\n**User:** ${userInfo.name} (${userInfo.email})` : ''}:\n${message}`,
+    }),
+  }).catch(error => {
     console.error('Error sending message to Discord:', error);
-  }
+  });
 }
 
 export function setupWebSocket(server: Server) {
@@ -86,32 +80,51 @@ function handleInit(ws: WebSocket, message: InitMessage) {
 }
 
 async function handleUserMessage(ws: WebSocket, message: UserMessage) {
-  console.log('Handling user message:', message);
-  console.log('Message type:', message.type);
-  console.log('Message content:', message.message);
-  console.log('Message threadId:', message.threadId);
-  console.log('User info:', message.userInfo);
-  console.log('Full message object:', JSON.stringify(message, null, 2));
+  console.log('Handling user message:', {
+    type: message.type,
+    threadId: message.threadId,
+    userInfo: message.userInfo,
+    messageLength: message.message.length
+  });
 
-  // Send user message to Discord
-  await sendToDiscord(message.message, 'User', message.threadId || 'default', message.userInfo);
+  const threadId = message.threadId || 'default';
 
-  // Send thinking message
-  ws.send(JSON.stringify({
-    type: 'system_message',
-    threadId: message.threadId || 'default',
-    message: 'Assistant is thinking...'
-  }));
+  try {
+    // Send user message to Discord without awaiting
+    sendToDiscord(message.message, 'User', threadId, message.userInfo);
 
-  const response = await processUserMessage(message.threadId || 'default', message.message);
-  console.log('OpenAI response:', response);
+    // Send thinking message
+    ws.send(JSON.stringify({
+      type: 'system_message',
+      threadId: threadId,
+      message: 'thinking'
+    }));
 
-  // Send assistant response to Discord
-  await sendToDiscord(response, 'Assistant', message.threadId || 'default', message.userInfo);
+    // Process the message
+    const response = await processUserMessage(threadId, message.message);
+    console.log('OpenAI response received:', {
+      threadId,
+      responseLength: response.length
+    });
 
-  ws.send(JSON.stringify({
-    type: 'new_message',
-    message: response,
-    sender: 'assistant'
-  }));
+    // Send assistant response to Discord without awaiting
+    sendToDiscord(response, 'Assistant', threadId, message.userInfo);
+
+    // Send response to user
+    ws.send(JSON.stringify({
+      type: 'new_message',
+      message: response,
+      sender: 'ai',
+      threadId: threadId
+    }));
+  } catch (error) {
+    console.error('Error in handleUserMessage:', error);
+    
+    // Send error message to user
+    ws.send(JSON.stringify({
+      type: 'system_message',
+      threadId: threadId,
+      message: error instanceof Error ? error.message : 'An error occurred while processing your message'
+    }));
+  }
 } 

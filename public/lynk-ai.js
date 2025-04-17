@@ -1,7 +1,17 @@
-(function () {
+// Wait for marked to load before initializing
+if (typeof marked === 'undefined') {
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
+  script.onload = initializeChat;
+  document.head.appendChild(script);
+} else {
+  initializeChat();
+}
+
+function initializeChat() {
   // Get the current shop's domain from the URL parameter
   const shop = window.location.hostname;
-  
+  console.log('shop:', shop);
   // WebSocket connection
   let ws = null;
   let threadId = null;
@@ -128,7 +138,6 @@
     justify-content: space-between;
     align-items: center;
     position: relative;
-    z-index: 1;
   `;
   chatHeader.innerHTML = `
     <span style="font-weight: bold; font-size: 18px;">Chat with us</span>
@@ -347,11 +356,6 @@
   document.body.appendChild(userInfoModal);
   document.body.appendChild(modal);
 
-  // Add marked.js for markdown parsing
-  const markedScript = document.createElement('script');
-  markedScript.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
-  document.head.appendChild(markedScript);
-
   // Add highlight.js for code syntax highlighting
   const highlightCSS = document.createElement('link');
   highlightCSS.rel = 'stylesheet';
@@ -421,18 +425,62 @@
     return thinkingDiv;
   }
 
+  // WebSocket message handler
+  function handleWebSocketMessage(event) {
+    try {
+      const data = JSON.parse(event.data);
+      console.log('WebSocket message received:', data);
+
+
+      if (data.type === 'new_message') {
+        // Ensure message content is treated as markdown for AI messages
+        if (data.sender === 'ai') {
+          console.log('Raw AI message:', data.message);
+          // Preserve markdown characters by decoding HTML entities
+          const decodedMessage = data.message
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&#39;/g, "'")
+            .replace(/&nbsp;/g, ' ');
+          console.log('Decoded message:', decodedMessage);
+          addMessage(decodedMessage, 'ai');
+        } else {
+          addMessage(data.message, data.sender);
+        }
+      } else if (data.type === 'system_message' && data.message !== 'Connection established') {
+        addMessage(data.message, 'system');
+      }
+    } catch (error) {
+      console.error('Error handling WebSocket message:', error);
+    }
+  }
+
   // Function to safely parse markdown
   function parseMarkdown(content) {
+    console.log('Parsing markdown for content:', content);
     try {
-      if (typeof marked !== 'undefined') {
-        const parsed = marked.parse(content, {
-          breaks: true,
-          gfm: true,
-          headerIds: false
-        });
-        return parsed;
+      if (typeof marked === 'undefined') {
+        console.warn('marked library not loaded, loading it now...');
+        return content;
       }
-      return content;
+
+      // Configure marked options for better formatting
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+        headerIds: false,
+        mangle: false,
+        sanitize: false,
+        smartLists: true,
+        smartypants: true
+      });
+
+      // Parse the content
+      const parsed = marked.parse(content);
+      console.log('Parsed markdown result:', parsed);
+      return parsed;
     } catch (error) {
       console.error('Error parsing markdown:', error);
       return content;
@@ -441,6 +489,8 @@
 
   // Function to add message to chat
   function addMessage(content, sender, isStreaming = false) {
+    console.log('Adding message:', { content, sender, isStreaming });
+    
     // Remove existing thinking indicator if any
     const existingThinking = messagesContainer.querySelector('.thinking-indicator');
     if (existingThinking) {
@@ -448,69 +498,125 @@
     }
 
     // If it's a system message showing "thinking", use the animated indicator
-    if (sender === 'system' && content.includes('thinking')) {
+    if (sender === 'system' && content === 'thinking') {
       const thinkingIndicator = createThinkingIndicator();
       messagesContainer.appendChild(thinkingIndicator);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
       return;
     }
 
+    // Create message container
     const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${sender}-message`;
     messageDiv.style.cssText = `
-      padding: 12px 16px;
-      border-radius: 12px;
       max-width: 80%;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 12px;
       word-wrap: break-word;
-      line-height: 1.4;
-      margin: 8px 0;
-      ${sender === 'user' ? 'margin-left: auto; background: #E3F2FD; color: #1565C0;' : 'margin-right: auto; background: #f5f5f5; color: #333;'}
+      ${sender === 'user' ? 'background: linear-gradient(90deg, #5C6AC4, #8A2BE2); color: white; align-self: flex-end;' : 'background: #f0f0f0; color: #333; align-self: flex-start;'}
     `;
 
-    // Create message content container
+    // Create content container with markdown styles
     const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
-    contentDiv.style.cssText = `
-      font-size: 16px;
-    `;
+    contentDiv.className = 'markdown-content';
+    
+    console.log('adding content:', content);
 
-    // Parse markdown for AI messages
+
+    // Add markdown styles dynamically if they don't exist
+    if (!document.getElementById('markdown-styles')) {
+      const style = document.createElement('style');
+      style.id = 'markdown-styles';
+      style.textContent = `
+        .markdown-content {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          line-height: 1.6;
+          color: inherit;
+        }
+        .markdown-content p {
+          margin: 0 0 1em 0;
+        }
+        .markdown-content p:last-child {
+          margin-bottom: 0;
+        }
+        .markdown-content ul, .markdown-content ol {
+          margin: 1em 0;
+          padding-left: 2em;
+        }
+        .markdown-content li {
+          margin: 0.5em 0;
+        }
+        .markdown-content h1, .markdown-content h2, .markdown-content h3,
+        .markdown-content h4, .markdown-content h5, .markdown-content h6 {
+          margin: 1.5em 0 0.5em;
+          line-height: 1.25;
+        }
+        .markdown-content h1 { font-size: 1.5em; }
+        .markdown-content h2 { font-size: 1.3em; }
+        .markdown-content h3 { font-size: 1.2em; }
+        .markdown-content h4 { font-size: 1.1em; }
+        .markdown-content h5, .markdown-content h6 { font-size: 1em; }
+        .markdown-content pre {
+          background: ${sender === 'user' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'};
+          padding: 1em;
+          border-radius: 8px;
+          overflow-x: auto;
+          margin: 1em 0;
+        }
+        .markdown-content code {
+          background: ${sender === 'user' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.05)'};
+          padding: 0.2em 0.4em;
+          border-radius: 4px;
+          font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+          font-size: 0.9em;
+        }
+        .markdown-content pre code {
+          background: none;
+          padding: 0;
+        }
+        .markdown-content blockquote {
+          border-left: 3px solid ${sender === 'user' ? 'rgba(255,255,255,0.4)' : '#ddd'};
+          margin: 1em 0;
+          padding: 0.5em 0 0.5em 1em;
+          color: inherit;
+          font-style: italic;
+        }
+        .markdown-content a {
+          color: ${sender === 'user' ? 'white' : '#2B6CB0'};
+          text-decoration: none;
+          border-bottom: 1px solid currentColor;
+        }
+        .markdown-content a:hover {
+          border-bottom: 2px solid currentColor;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Handle content based on sender
     if (sender === 'ai') {
-      contentDiv.innerHTML = parseMarkdown(content);
+      // For AI messages, parse markdown
+      const parsedContent = parseMarkdown(content);
+      contentDiv.innerHTML = parsedContent;
       
-      // Apply syntax highlighting to code blocks
+      // Apply syntax highlighting to code blocks if highlight.js is available
       if (typeof hljs !== 'undefined') {
         contentDiv.querySelectorAll('pre code').forEach((block) => {
           hljs.highlightElement(block);
         });
       }
-
-      // Style code blocks
-      contentDiv.querySelectorAll('pre').forEach((pre) => {
-        pre.style.cssText = `
-          background: #f8f8f8;
-          border-radius: 6px;
-          padding: 12px;
-          overflow-x: auto;
-          margin: 8px 0;
-        `;
-      });
-
-      // Style inline code
-      contentDiv.querySelectorAll('code:not(pre code)').forEach((code) => {
-        code.style.cssText = `
-          background: #f0f0f0;
-          padding: 2px 4px;
-          border-radius: 4px;
-          font-size: 0.9em;
-        `;
-      });
     } else {
-      // For user messages, just use text
+      // For user messages, preserve line breaks but don't parse markdown
       contentDiv.textContent = content;
     }
-
+    
+    // Add content to message
     messageDiv.appendChild(contentDiv);
+    
+    // Add message to container
     messagesContainer.appendChild(messageDiv);
+    
+    // Scroll to bottom
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
@@ -519,9 +625,9 @@
     const actions = [
       { text: 'Check my order', prompt: 'Can you help me check the status of my order?' },
       { text: 'Product question', prompt: 'I have a question about a product' },
-      { text: 'Schedule appointment', prompt: 'I would like to schedule an appointment' },
       { text: 'Return/Exchange', prompt: 'I need help with a return or exchange' },
-      { text: 'Store hours', prompt: 'What are your store hours?' },
+      { text: 'Schedule appointment', prompt: 'I would like to schedule an appointment' },
+      { text: 'Studio hours', prompt: 'What are your studio hours?' },
       { text: 'Contact support', prompt: 'I need to speak with customer support' }
     ];
 
@@ -629,42 +735,22 @@
 
   // Create and setup WebSocket connection
   function setupWebSocket() {
-    const wsProtocol = appUrl.startsWith('https:') ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${new URL(appUrl).host}`;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}`;
     console.log('Connecting to WebSocket:', wsUrl);
     
     ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.log('WebSocket connected');
-      // Show welcome message when connection is established
       if (userInfo.name) {
         showWelcomeMessage();
       } else {
         showUserInfoForm();
       }
-      
-      if (threadId) {
-        ws.send(JSON.stringify({
-          type: 'init',
-          threadId: threadId
-        }));
-      }
     };
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'new_message') {
-          addMessage(data.message, data.sender);
-        } else if (data.type === 'system_message' && !data.message.includes('Connection established')) {
-          // Only show system messages that aren't connection established
-          addMessage(data.message, 'system');
-        }
-      } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
-      }
-    };
+    ws.onmessage = handleWebSocketMessage;
 
     ws.onclose = () => {
       console.log('WebSocket disconnected. Retrying in 5s...');
@@ -750,4 +836,4 @@
       sendButton.click();
     }
   };
-})();
+}
