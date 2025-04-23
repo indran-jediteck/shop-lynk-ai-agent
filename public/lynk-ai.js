@@ -1,3 +1,6 @@
+
+let hasInitialized = false;
+
 // Wait for marked to load before initializing
 if (typeof marked === 'undefined') {
   const script = document.createElement('script');
@@ -12,9 +15,21 @@ function initializeChat() {
   // Get the current shop's domain from the URL parameter
   const shop = window.location.hostname;
   console.log('shop:', shop);
+
+  // Generate or retrieve browser ID
+  let browserId = localStorage.getItem('lynk_browser_id');
+  if (!browserId) {
+    browserId = 'browser-' + 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+    localStorage.setItem('lynk_browser_id', browserId);
+  }
+  console.log('Browser ID:', browserId);
+
   // WebSocket connection
   let ws = null;
-  let threadId = null;
 
   // Get the app URL from the script tag
   const scriptTag = document.currentScript;
@@ -56,59 +71,6 @@ function initializeChat() {
     chatButton.style.transform = 'scale(1)';
     chatButton.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
   };
-
-  // Create user info modal
-  const userInfoModal = document.createElement('div');
-  userInfoModal.style.cssText = `
-    position: fixed;
-    bottom: 80px;
-    right: 20px;
-    width: 300px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    display: none;
-    flex-direction: column;
-    z-index: 1000;
-    overflow: hidden;
-  `;
-
-  userInfoModal.innerHTML = `
-    <div style="padding: 15px; background: linear-gradient(90deg, #5C6AC4, #8A2BE2); color: white;">
-      <h3 style="margin: 0; font-size: 16px;">Welcome to Chat!</h3>
-    </div>
-    <div style="padding: 20px;">
-      <p style="margin: 0 0 15px; font-size: 14px;">Please provide your information to start chatting:</p>
-      <input type="text" id="chat-name" placeholder="Your name" value="${userInfo.name}" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        margin-bottom: 8px;
-        font-size: 14px;
-        box-sizing: border-box;
-      ">
-      <input type="email" id="chat-email" placeholder="Your email" value="${userInfo.email}" style="
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        margin-bottom: 15px;
-        font-size: 14px;
-        box-sizing: border-box;
-      ">
-      <button id="start-chat" style="
-        width: 100%;
-        padding: 10px;
-        background: linear-gradient(90deg, #5C6AC4, #8A2BE2);
-        color: white;
-        border: none;
-        border-radius: 4px;
-        font-size: 14px;
-        cursor: pointer;
-      ">Start Chatting</button>
-    </div>
-  `;
 
   // Create chat modal
   const modal = document.createElement('div');
@@ -219,7 +181,7 @@ function initializeChat() {
   sendButton.onmouseover = () => sendButton.style.transform = 'scale(1.05)';
   sendButton.onmouseout = () => sendButton.style.transform = 'scale(1)';
 
-  // Create user info form with an actual form element
+  // Create user info form
   const userInfoForm = document.createElement('div');
   userInfoForm.style.cssText = `
     position: absolute;
@@ -288,6 +250,20 @@ function initializeChat() {
           cursor: pointer;
         "
       >Start Chatting</button>
+      <p style="
+        margin: 15px 0 0;
+        font-size: 13px;
+        color: #666;
+        line-height: 1.4;
+        text-align: left;
+      ">
+        We use your email to provide personalized shopping experiences, including:
+        <br>• New customer discounts
+        <br>• Special offers for returning customers
+        <br>• Order updates and tracking
+        <br>• Personalized product recommendations
+        <br><br>If our AI assistant can't fully address your query and our team is offline, we'll email you a response as soon as possible.
+      </p>
     </form>
   `;
 
@@ -351,9 +327,8 @@ function initializeChat() {
   modal.appendChild(messagesContainer);
   modal.appendChild(inputContainer);
 
-  // Add both modals to page
+  // Add modal to page
   document.body.appendChild(chatButton);
-  document.body.appendChild(userInfoModal);
   document.body.appendChild(modal);
 
   // Add highlight.js for code syntax highlighting
@@ -446,6 +421,51 @@ function initializeChat() {
             .replace(/&nbsp;/g, ' ');
           console.log('Decoded message:', decodedMessage);
           addMessage(decodedMessage, 'ai');
+
+          if (data.followUpActions && Array.isArray(data.followUpActions)) {
+            const lastMessage = messagesContainer.lastElementChild;
+            const buttonsContainer = document.createElement('div');
+            buttonsContainer.style.cssText = `
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+              margin-top: 12px;
+            `;
+          
+            data.followUpActions.forEach(action => {
+              const button = document.createElement('button');
+              button.textContent = action.text;
+              button.style.cssText = `
+                padding: 8px 12px;
+                background: #E3F2FD;
+                color: #1565C0;
+                border: none;
+                border-radius: 20px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: all 0.2s ease;
+              `;
+              button.onmouseover = () => {
+                button.style.background = '#1565C0';
+                button.style.color = 'white';
+              };
+              button.onmouseout = () => {
+                button.style.background = '#E3F2FD';
+                button.style.color = '#1565C0';
+              };
+              button.onclick = () => {
+                input.value = action.prompt;
+                sendButton.click();
+              };
+              buttonsContainer.appendChild(button);
+            });
+          
+            if (lastMessage) {
+              lastMessage.appendChild(buttonsContainer);
+            }
+          }
+
+
         } else {
           addMessage(data.message, data.sender);
         }
@@ -459,32 +479,10 @@ function initializeChat() {
 
   // Function to safely parse markdown
   function parseMarkdown(content) {
-    console.log('Parsing markdown for content:', content);
-    try {
-      if (typeof marked === 'undefined') {
-        console.warn('marked library not loaded, loading it now...');
-        return content;
-      }
-
-      // Configure marked options for better formatting
-      marked.setOptions({
-        breaks: true,
-        gfm: true,
-        headerIds: false,
-        mangle: false,
-        sanitize: false,
-        smartLists: true,
-        smartypants: true
-      });
-
-      // Parse the content
-      const parsed = marked.parse(content);
-      console.log('Parsed markdown result:', parsed);
-      return parsed;
-    } catch (error) {
-      console.error('Error parsing markdown:', error);
-      return content;
-    }
+    console.log('Raw content:', content);
+    const parsed = marked.parse(content);
+    console.log('Parsed HTML:', parsed);
+    return parsed;
   }
 
   // Function to add message to chat
@@ -513,7 +511,7 @@ function initializeChat() {
       border-radius: 12px;
       margin-bottom: 12px;
       word-wrap: break-word;
-      ${sender === 'user' ? 'background: linear-gradient(90deg, #5C6AC4, #8A2BE2); color: white; align-self: flex-end;' : 'background: #f0f0f0; color: #333; align-self: flex-start;'}
+      ${sender === 'user' ? 'background: #f0f0f0; color: #333; align-self: flex-end;' : 'background: #f0f0f0; color: #333; align-self: flex-start;'}
     `;
 
     // Create content container with markdown styles
@@ -557,14 +555,14 @@ function initializeChat() {
         .markdown-content h4 { font-size: 1.1em; }
         .markdown-content h5, .markdown-content h6 { font-size: 1em; }
         .markdown-content pre {
-          background: ${sender === 'user' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'};
+          background: rgba(0,0,0,0.05);
           padding: 1em;
           border-radius: 8px;
           overflow-x: auto;
           margin: 1em 0;
         }
         .markdown-content code {
-          background: ${sender === 'user' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.05)'};
+          background: rgba(0,0,0,0.05);
           padding: 0.2em 0.4em;
           border-radius: 4px;
           font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
@@ -575,19 +573,76 @@ function initializeChat() {
           padding: 0;
         }
         .markdown-content blockquote {
-          border-left: 3px solid ${sender === 'user' ? 'rgba(255,255,255,0.4)' : '#ddd'};
+          border-left: 3px solid #ddd;
           margin: 1em 0;
           padding: 0.5em 0 0.5em 1em;
           color: inherit;
           font-style: italic;
         }
         .markdown-content a {
-          color: ${sender === 'user' ? 'white' : '#2B6CB0'};
+          color: #2B6CB0;
           text-decoration: none;
           border-bottom: 1px solid currentColor;
         }
         .markdown-content a:hover {
           border-bottom: 2px solid currentColor;
+        }
+        .markdown-content img {
+          display: inline-block;
+          max-width: 150px;
+          height: 150px;
+          border-radius: 8px;
+          margin: 4px;
+          object-fit: cover;
+          vertical-align: middle;
+          cursor: pointer;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .markdown-content img:hover {
+          transform: scale(1.05);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .markdown-content .product-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 1em;
+          margin: 1em 0;
+        }
+        .markdown-content .product-card {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 1em;
+          background: white;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .markdown-content .product-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+        }
+        .markdown-content .product-card img {
+          width: 200px;
+          height: 200px;
+          object-fit: cover;
+          margin: 0;
+          cursor: pointer;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .markdown-content .product-card a {
+          text-decoration: none;
+          border: none;
+          display: block;
+        }
+        
+        .markdown-content .product-card a:hover {
+          border: none;
+        }
+        
+        .markdown-content .product-card img:hover {
+          transform: scale(1.05);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
       `;
       document.head.appendChild(style);
@@ -598,6 +653,12 @@ function initializeChat() {
       // For AI messages, parse markdown
       const parsedContent = parseMarkdown(content);
       contentDiv.innerHTML = parsedContent;
+      
+      // Remove default link styling from product card links
+      contentDiv.querySelectorAll('.product-card a').forEach(link => {
+        link.style.textDecoration = 'none';
+        link.style.border = 'none';
+      });
       
       // Apply syntax highlighting to code blocks if highlight.js is available
       if (typeof hljs !== 'undefined') {
@@ -670,16 +731,21 @@ function initializeChat() {
     return buttonsContainer;
   }
 
-  // Function to show welcome message
-  function showWelcomeMessage() {
-    const firstName = userInfo.name.split(' ')[0] || 'there';
-    const welcomeMessage = `Hi ${firstName}! 👋 I'm your AI assistant. How can I help you today?`;
-    addMessage(welcomeMessage, 'ai');
+  // // Function to show welcome message
+  // function showWelcomeMessage() {
+  //   const firstName = userInfo.name.split(' ')[0] || 'there';
+  //   const welcomeMessage = `Hi ${firstName}! 👋 I'm your AI assistant. How can I help you today?`;
+  //   ws.send(JSON.stringify({
+  //     type: 'user_message',
+  //     message: '__welcome__',
+  //     browserId: browserId,
+  //     userInfo: userInfo
+  //   }));
     
-    const buttonsContainer = createQuickActionButtons();
-    const lastMessage = messagesContainer.lastElementChild;
-    lastMessage.appendChild(buttonsContainer);
-  }
+  //   const buttonsContainer = createQuickActionButtons();
+  //   const lastMessage = messagesContainer.lastElementChild;
+  //   lastMessage.appendChild(buttonsContainer);
+  // }
 
   // Function to show user info form
   function showUserInfoForm() {
@@ -722,16 +788,24 @@ function initializeChat() {
     
     console.log('Form values:', { name, email });
     
-    if (name && email) {
-      userInfo = { name, email };
-      localStorage.setItem('chatUserInfo', JSON.stringify(userInfo));
-      console.log('Saved user info:', userInfo);
-      hideUserInfoForm();
-      showWelcomeMessage();
-    } else {
-      alert('Please provide both name and email');
-    }
-  });
+      if (name && email) {
+        userInfo = { name, email };
+        localStorage.setItem('chatUserInfo', JSON.stringify(userInfo));
+        console.log('Saved user info:', userInfo);
+        hideUserInfoForm();
+        if (ws && ws.readyState === WebSocket.OPEN && !hasInitialized) {
+          ws.send(JSON.stringify({
+            type: 'init',
+            browserId: browserId,
+            userInfo: userInfo  
+          }));
+          hasInitialized = true;
+        }
+  //      showWelcomeMessage();
+      } else {
+        alert('Please provide both name and email');
+      }
+    });
 
   // Create and setup WebSocket connection
   function setupWebSocket() {
@@ -740,53 +814,60 @@ function initializeChat() {
     console.log('Connecting to WebSocket:', wsUrl);
     
     ws = new WebSocket(wsUrl);
-
+  
     ws.onopen = () => {
       console.log('WebSocket connected');
-      if (userInfo.name) {
-        showWelcomeMessage();
-      } else {
+  
+      // ❗ Only send init if we have user info
+      if (userInfo.name && userInfo.email) {
+        ws.send(JSON.stringify({
+          type: 'init',
+          browserId,
+          userInfo
+        }));
+        hasInitialized = true;
+      }
+      
+      // Show appropriate UI
+      if (!userInfo.name || !userInfo.email) {
         showUserInfoForm();
+      } else {
+        hideUserInfoForm();
       }
     };
-
+  
     ws.onmessage = handleWebSocketMessage;
-
+  
     ws.onclose = () => {
       console.log('WebSocket disconnected. Retrying in 5s...');
       setTimeout(setupWebSocket, 5000);
-    };
+      hasInitialized = false;
 
+    };
+  
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
   }
+  
 
   // Initialize WebSocket when chat button is clicked
   chatButton.onclick = () => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       setupWebSocket();
     }
+    
     // Show chat modal
     modal.style.display = 'flex';
-    chatButton.style.display = 'none';
-    if (!threadId) {
-      threadId = generateThreadId();
-      ws.send(JSON.stringify({
-        type: 'init',
-        threadId: threadId
-      }));
+    
+    // Show user info form if no user info exists
+    if (!userInfo.name || !userInfo.email) {
+      showUserInfoForm();
+    } else {
+      hideUserInfoForm();
     }
+    chatButton.style.display = 'none';
   };
-
-  // Generate a unique thread ID
-  function generateThreadId() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  }
 
   // Handle close button
   document.getElementById('closeChat').onclick = () => {
@@ -805,26 +886,26 @@ function initializeChat() {
     addMessage(message, 'user');
     input.value = '';
 
-    // Get user info from localStorage and validate
-    let userInfo = { name: '', email: '' };
-    try {
-      const storedInfo = localStorage.getItem('chatUserInfo');
-      if (storedInfo) {
-        userInfo = JSON.parse(storedInfo);
-        if (!userInfo.name || !userInfo.email) {
-          console.warn('Invalid user info in localStorage');
-          userInfo = { name: '', email: '' };
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user info:', error);
-    }
+    // // Get user info from localStorage and validate
+    // let userInfo = { name: '', email: '' };
+    // try {
+    //   const storedInfo = localStorage.getItem('chatUserInfo');
+    //   if (storedInfo) {
+    //     userInfo = JSON.parse(storedInfo);
+    //     if (!userInfo.name || !userInfo.email) {
+    //       console.warn('Invalid user info in localStorage');
+    //       userInfo = { name: '', email: '' };
+    //     }
+    //   }
+    // } catch (error) {
+    //   console.error('Error loading user info:', error);
+    // }
 
-    // Send message through WebSocket
+    // Send message through WebSocket with only browser ID
     ws.send(JSON.stringify({
       type: 'user_message',
       message: message,
-      threadId: threadId,
+      browserId: browserId,
       userInfo: userInfo
     }));
   };

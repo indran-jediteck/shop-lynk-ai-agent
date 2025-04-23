@@ -58,6 +58,107 @@ export class OpenAIService {
     this.threads = new Map();
   }
 
+  private async handleProductSearch(args: {
+    product_type: string;
+    search_term?: string;
+    color?: string;
+    size?: string;
+    material?: string;
+    price_range?: {
+      min: number;
+      max: number;
+    };
+  }): Promise<any> {
+    console.log('Performing product search with args:', args);
+    
+    try {
+      // Validate required product_type parameter
+      if (!args.product_type) {
+        console.error('Missing required product_type parameter');
+        throw new Error('product_type is required');
+      }
+
+      // Construct search parameters
+      const searchParams = {
+        search_term: args.search_term || args.product_type,
+        color: args.color || 'any',
+        size: args.size || 'standard',
+        material: args.material || 'any',
+        price_range: args.price_range || { min: 0, max: 1000 }
+      };
+
+      console.log('Search params:', searchParams);
+
+      // Make request to our products API endpoint
+      const response = await fetch('http://localhost:3000/api/products/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(searchParams)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Product search API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Product search response:', data);
+
+      // Log each product's image URL for debugging
+      data.results.forEach((product: any) => {
+        console.log(`Product ${product.name} image URL:`, product.image);
+      });
+
+      return data;
+    } catch (error) {
+      console.error('Error in product search:', error);
+      throw error;
+    }
+  }
+
+  private async handleToolCalls(threadId: string, runId: string, toolCalls: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[]): Promise<void> {
+    const toolOutputs = [];
+
+    for (const toolCall of toolCalls) {
+      console.log('Processing tool call:', toolCall);
+      console.log('Function name:', toolCall.function.name);
+      console.log('Function arguments:', toolCall.function.arguments);
+
+      if (toolCall.function.name === 'product_search') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          console.log('Parsed arguments:', args);
+          if (!args.product_type || typeof args.product_type !== 'string') {
+            throw new Error('Missing or invalid product_type');
+          }
+        
+          
+          const result = await this.handleProductSearch(args);
+          toolOutputs.push({
+            tool_call_id: toolCall.id,
+            output: JSON.stringify(result)
+          });
+        } catch (error) {
+          console.error('Error processing product search:', error);
+          toolOutputs.push({
+            tool_call_id: toolCall.id,
+            output: JSON.stringify({ 
+              error: 'Failed to process product search',
+              details: error instanceof Error ? error.message : 'Unknown error'
+            })
+          });
+        }
+      }
+    }
+
+    if (toolOutputs.length > 0) {
+      await this.client.beta.threads.runs.submitToolOutputs(threadId, runId, {
+        tool_outputs: toolOutputs
+      });
+    }
+  }
+
   public async createThread(): Promise<string> {
     const thread = await this.client.beta.threads.create();
     return thread.id;
@@ -82,11 +183,19 @@ export class OpenAIService {
       let runStatus = await this.client.beta.threads.runs.retrieve(threadId, run.id);
       
       while (runStatus.status !== 'completed' && attempts < maxAttempts) {
+        console.log('Run status:', runStatus.status);
+
         if (runStatus.status === 'failed') {
           throw new Error('Assistant run failed: ' + runStatus.last_error?.message);
         }
         if (runStatus.status === 'expired') {
           throw new Error('Assistant run expired');
+        }
+        if (runStatus.status === 'requires_action') {
+          if (runStatus.required_action?.type === 'submit_tool_outputs') {
+            const toolCalls = runStatus.required_action.submit_tool_outputs.tool_calls;
+            await this.handleToolCalls(threadId, run.id, toolCalls);
+          }
         }
         
         await new Promise(resolve => setTimeout(resolve, 1000));

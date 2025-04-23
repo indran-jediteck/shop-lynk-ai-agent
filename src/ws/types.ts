@@ -2,7 +2,11 @@ import { WebSocket as WS } from 'ws';
 
 export interface InitMessage {
   type: 'init';
-  threadId: string;
+  browserId: string;
+  userInfo?: {
+    name: string;
+    email: string;
+  };
 }
 
 export interface UserMessage {
@@ -17,15 +21,15 @@ export interface UserMessage {
 
 export interface NewMessage {
   type: 'new_message';
-  threadId: string;
-  content: string;
-  role: 'user' | 'assistant';
+  browserId: string;
+  message: string;
+  sender: string;
 }
 
 export interface SystemMessage {
   type: 'system_message';
-  threadId: string;
-  content: string;
+  browserId: string;
+  message: string;
 }
 
 export type WebSocketMessage = InitMessage | UserMessage | NewMessage | SystemMessage;

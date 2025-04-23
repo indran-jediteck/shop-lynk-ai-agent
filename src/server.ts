@@ -7,6 +7,8 @@ import { setupWebSocket } from './ws/handler';
 import { setupStylesRoute } from './api/styles';
 import { setupDiscordWebhookRoute } from './api/webhook-discord';
 import { connectToDatabase } from './lib/db';
+import productsRouter from './routes/products';
+import { activeConnections } from './ws/clients';
 
 const app = express();
 const server = http.createServer(app);
@@ -45,9 +47,33 @@ app.use(express.static(path.join(__dirname, '../public'), {
 // API routes
 setupStylesRoute(app);
 setupDiscordWebhookRoute(app);
+app.use('/api/products', productsRouter);
 
 // WebSocket setup
 setupWebSocket(server);
+
+// Add this route to your server.ts
+app.post('/api/inject', express.json(), (req, res) => {
+    const { browserId, message, sender = 'ai' } = req.body;
+    
+    // Debug: Log all active connections
+    console.log('Active connections:', Array.from(activeConnections.keys()));
+    console.log('Looking for browserId:', browserId);
+    if (!browserId || !message) {
+      return res.status(400).json({ error: 'Missing browserId or message' });
+    }
+    const ws = activeConnections.get(browserId);
+    if (ws && ws.readyState === 1) { // 1 = WebSocket.OPEN
+        ws.send(JSON.stringify({
+            type: 'new_message',
+            message: message,
+            sender: sender
+        }));
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: 'No active connection found for this browser ID' });
+    }
+});
 
 // Start server
 const PORT = process.env.PORT || 3000;

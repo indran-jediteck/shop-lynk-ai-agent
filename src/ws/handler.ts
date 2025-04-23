@@ -26,42 +26,56 @@ async function sendToDiscord(message: string, sender: string, threadId: string, 
 
 export function setupWebSocket(server: Server) {
   const wss = new WebSocketServer({ server });
+  console.log('WebSocket server initialized');
 
   wss.on('connection', (ws: WebSocket) => {
-    console.log('New WebSocket connection');
+    console.log('New WebSocket connection established');
 
-    ws.on('message', async (data: string) => {
+    ws.on('message', async (data: Buffer | string) => {
       try {
-        console.log('Received raw message:', data);
-        const message: WebSocketMessage = JSON.parse(data);
-        console.log('Parsed message:', message);
+        // Convert Buffer to string if needed
+        const messageStr = data instanceof Buffer ? data.toString('utf8') : data as string;
+        console.log('Raw message received (as string):', messageStr);
+        
+        const message: WebSocketMessage = JSON.parse(messageStr);
+        console.log('Parsed message object:', JSON.stringify(message, null, 2));
         
         switch (message.type) {
           case 'init':
-            handleInit(ws, message);
-            break;
+            handleInit(ws, message as InitMessage);
+            break;  
           case 'user_message':
+            console.log('Received user message, passing to handler');
             await handleUserMessage(ws, message);
             break;
+            
           default:
             console.warn('Unknown message type:', message.type);
         }
       } catch (error) {
         console.error('Error processing message:', error);
+        if (error instanceof Error) {
+          console.error('Error details:', error.message);
+          console.error('Error stack:', error.stack);
+        }
         ws.send(JSON.stringify({
           type: 'system_message',
-          threadId: 'error',
           message: 'Error processing message'
         }));
       }
     });
 
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+    });
+
     ws.on('close', () => {
-      // Remove the connection from activeConnections
-      for (const [threadId, socket] of activeConnections.entries()) {
+      console.log('WebSocket connection closed');
+      for (const [browserId, socket] of activeConnections.entries()) {
         if (socket === ws) {
-          activeConnections.delete(threadId);
-          console.log('Client disconnected:', threadId);
+          activeConnections.delete(browserId);
+          console.log('Removed connection. BrowserId:', browserId);
+          console.log('Remaining connections:', Array.from(activeConnections.keys()));
           break;
         }
       }
@@ -71,13 +85,43 @@ export function setupWebSocket(server: Server) {
 
 function handleInit(ws: WebSocket, message: InitMessage) {
   console.log('Handling init message:', message);
-  activeConnections.set(message.threadId, ws);
+  if (activeConnections.has(message.browserId)) {
+    console.log('BrowserId already registered. Skipping duplicate init.');
+    return;
+  }
+
+  if (!message.userInfo || !message.userInfo.name || !message.userInfo.email) {
+    console.warn('Init received without complete userInfo. Ignoring.');
+    return;
+  }
+
+  activeConnections.set(message.browserId, ws);
+
   ws.send(JSON.stringify({
     type: 'system_message',
-    threadId: message.threadId,
+    browserId: message.browserId,
     message: 'Connection established'
   }));
+
+  const firstName = message.userInfo.name.split(' ')[0] || 'there';
+  ws.send(JSON.stringify({
+    type: 'new_message',
+    message: `Hi ${firstName}! 👋 I'm your AI assistant. How can I help you today?`,
+    sender: 'ai',
+    browserId: message.browserId,
+    followUpActions: [
+      { text: 'Check my order', prompt: 'Can you help me check the status of my order?' },
+      { text: 'Product question', prompt: 'I have a question about a product' },
+      { text: 'Return/Exchange', prompt: 'I need help with a return or exchange' },
+      { text: 'Schedule appointment', prompt: 'I would like to schedule an appointment' },
+      { text: 'Studio hours', prompt: 'What are your studio hours?' },
+      { text: 'Contact support', prompt: 'I need to speak with customer support' }
+    ]
+  }))
+
+  console.log('Active connections after init:', Array.from(activeConnections.keys()));
 }
+
 
 async function handleUserMessage(ws: WebSocket, message: UserMessage) {
   console.log('Handling user message:', {
