@@ -17,7 +17,7 @@ const TOKEN = process.env.DISCORD_BOT_TOKEN!;
 const API_URL = process.env.CHAT_INJECT_API || 'http://localhost:3000/api/inject';
 
 // TEMP: Hardcoded browser ID for now
-const DEFAULT_BROWSER_ID = 'browser-87670001-a940-4de7-a919-0018924bbdd0'; // Replace this with an active browserId for testing
+const DEFAULT_BROWSER_ID = process.env.BROWSERID || 'browser-7483984b-dd38-47a3-bf04-a0a3ebd2e573'; // Replace this with an active browserId for testing
 
 client.once('ready', () => {
   console.log(`🤖 Bot is online as ${client.user?.tag}`);
