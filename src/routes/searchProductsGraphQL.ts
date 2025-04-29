@@ -36,7 +36,10 @@ export async function searchProductsGraphQL(searchTerm: string) {
       }
     }
   `;
-
+ 
+  console.log(query);
+  console.log('testing in search products graphql');
+  
   const response = await fetch(`https://${SHOPIFY_STORE}/admin/api/2023-10/graphql.json`, {
     method: 'POST',
     headers: {

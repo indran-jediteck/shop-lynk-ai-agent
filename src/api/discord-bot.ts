@@ -29,6 +29,16 @@ client.on('messageCreate', async (message) => {
   // Command: !push Your message here
   if (message.content.startsWith('!push ')) {
     const content = message.content.replace('!push', '').trim();
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+    const emailMatch = content.match(emailRegex);
+    const email = emailMatch ? emailMatch[0] : null;
+    if (!email) {
+      await message.reply('❌ Failed: Missing email address. Usage: `!push user@example.com Your message here`');
+      return;
+    }
+    // Remove the email address from the content
+    const messageBody = content.replace(emailRegex, '').trim();
+
 
     try {
       const response = await fetch(API_URL, {
@@ -36,7 +46,7 @@ client.on('messageCreate', async (message) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           browserId: DEFAULT_BROWSER_ID,
-          message: content,
+          message: messageBody,
           sender: 'agent'
         })
       });
@@ -48,7 +58,7 @@ client.on('messageCreate', async (message) => {
       const result = await response.json() as InjectResponse;
 
       if (response.ok) {
-        await message.reply('✅ Message sent to user.');
+        await message.reply(`✅ Message sent to user. ${messageBody}`);
       } else {
         await message.reply(`❌ Failed: ${result.error || 'Unknown error'}`);
       }
