@@ -80,14 +80,14 @@ app.post('/api/inject', express.json(), async (req, res) => {
       console.log('found ws:', ws);
     }
    
-
     if (ws && ws.readyState === 1) { // 1 = WebSocket.OPEN
-        ws.send(JSON.stringify({
-            type: 'new_message',
-            message: message,
-            sender: sender
-        }));
-        res.json({ success: true , message: 'message sent to user.'});
+      console.log(`📤 Sending via WebSocket to browserId: ${browserId}`);
+      ws.send(JSON.stringify({
+          type: 'new_message',
+          message: message,
+          sender: sender
+      }));
+      res.json({ success: true, message: `Delivered to ${email} via WebSocket.`});
     } else {
       //lets send email to this user with a copy to the storeowners email address also 
       const storeOwnerEmail = process.env.customer_email;

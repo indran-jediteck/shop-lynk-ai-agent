@@ -37,7 +37,6 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
-
     // Remove the email address from the content
     const messageBody = content.replace(emailRegex, '').trim();
 
@@ -59,16 +58,8 @@ client.on('messageCreate', async (message) => {
       }
       const result = await response.json() as InjectResponse;
       console.log('Inject response:', result);  
-      let replyMessage = 'default';
-      if (result.success) {
-        console.log('Message sent to user:', result);
-        replyMessage = `✅ Message sent to user: "${result.message}"`;
-      }else{
-        replyMessage = `❌ Failed: ${result.error || 'Unknown error'}`;
-      }
-
-      if (response.ok) {
-        await message.reply(`✅ Message sent to user. ${replyMessage}`);
+      if (response.ok && result.success) {
+        await message.reply(`✅ ${result.message}`);
       } else {
         await message.reply(`❌ Failed: ${result.error || 'Unknown error'}`);
       }
