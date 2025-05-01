@@ -55,12 +55,20 @@ client.on('messageCreate', async (message) => {
       interface InjectResponse {
         success?: boolean;
         error?: string;
+        message?: string;
       }
       const result = await response.json() as InjectResponse;
       console.log('Inject response:', result);  
-      
+      let replyMessage = 'default';
+      if (result.success) {
+        console.log('Message sent to user:', result);
+        replyMessage = `✅ Message sent to user: "${result.message}"`;
+      }else{
+        replyMessage = `❌ Failed: ${result.error || 'Unknown error'}`;
+      }
+
       if (response.ok) {
-        await message.reply(`✅ Message sent to user. ${messageBody}`);
+        await message.reply(`✅ Message sent to user. ${replyMessage}`);
       } else {
         await message.reply(`❌ Failed: ${result.error || 'Unknown error'}`);
       }

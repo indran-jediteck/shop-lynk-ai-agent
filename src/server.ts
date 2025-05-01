@@ -10,6 +10,7 @@ import { connectToDatabase } from './lib/db';
 import productsRouter from './routes/products';
 import { activeConnections } from './ws/clients';
 import { BrowserThread } from './lib/db';
+import { emailService } from './lib/email';
 
 const app = express();
 const server = http.createServer(app);
@@ -55,7 +56,7 @@ setupWebSocket(server);
 
 // Add this route to your server.ts
 app.post('/api/inject', express.json(), async (req, res) => {
-    console.log('Inject request received:', req.body);
+    console.log('Inject request received ----  now:', req.body);
     const { email, message, sender = 'ai' } = req.body;
 
     // Debug: Log all active connections
@@ -67,12 +68,18 @@ app.post('/api/inject', express.json(), async (req, res) => {
     }
     // now we need to find the browserid for this email
     const browserThread = await BrowserThread.findOne({ email });
+    console.log('found browserThread:', browserThread);
+
     if (!browserThread) {
       return res.status(400).json({ error: 'No active connection found for this email' });
     }
     const browserId = browserThread.browserId;
     //check if browserid is in the browser_thread collection
     const ws = activeConnections.get(browserId);
+    if (ws) {
+      console.log('found ws:', ws);
+    }
+   
 
     if (ws && ws.readyState === 1) { // 1 = WebSocket.OPEN
         ws.send(JSON.stringify({
@@ -80,9 +87,12 @@ app.post('/api/inject', express.json(), async (req, res) => {
             message: message,
             sender: sender
         }));
-        res.json({ success: true });
+        res.json({ success: true , message: 'message sent to user.'});
     } else {
-        res.status(404).json({ error: 'No active connection found for this browser ID' });
+      //lets send email to this user with a copy to the storeowners email address also 
+      const storeOwnerEmail = process.env.customer_email;
+      await emailService.sendEmail(email, 'Copy of your message', message, storeOwnerEmail);
+      res.json({ success: true, message: 'email sent to user. Email sent to store owner' });
     }
 });
 

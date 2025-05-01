@@ -316,6 +316,31 @@
     inputWrapper.appendChild(chatInput);
     inputWrapper.appendChild(sendBtn);
 
+    // Create a container for input area and footer
+    const bottomContainer = document.createElement('div');
+    Object.assign(bottomContainer.style, {
+      borderTop: '1px solid #eee',
+    });
+
+    // Add powered by footer
+    const poweredByFooter = document.createElement('div');
+    poweredByFooter.style.cssText = `
+      padding: 8px;
+      text-align: center;
+      color: #666;
+      font-size: 12px;
+      border-top: 1px solid #eee;
+    `;
+    poweredByFooter.innerHTML = 'Powered by <a href="https://jediteck.com" target="_blank" style="color: #5C6AC4; text-decoration: none;">Lynk AI / JediTeck</a>';
+
+    // Correct order of elements
+    bottomContainer.appendChild(inputWrapper);
+    bottomContainer.appendChild(poweredByFooter);
+
+    // Add elements to content area in correct order
+    contentArea.appendChild(messages);
+    contentArea.appendChild(bottomContainer);
+
     function sendMessage() {
       const message = chatInput.value.trim();
       if (!message) return;
@@ -429,7 +454,7 @@
         userInfo = { name, email };  // 🔥 Update in memory too
         contentArea.innerHTML = ''; // reset inside scroll area
         contentArea.appendChild(messages);
-        contentArea.appendChild(inputWrapper);
+        contentArea.appendChild(bottomContainer);
         connectWebSocket();
       };
 
@@ -439,6 +464,7 @@
       formWrapper.appendChild(infoText);
 
       contentArea.appendChild(formWrapper);
+      contentArea.appendChild(bottomContainer); // Add the bottom container with input and footer
     }
     function adjustModalSize() {
       if (window.innerWidth < 768) {
@@ -490,7 +516,7 @@
     } else {
       // Assume messages and inputWrapper are globally available or defined
       contentArea.appendChild(messages);
-      contentArea.appendChild(inputWrapper);
+      contentArea.appendChild(bottomContainer);
       connectWebSocket();
     }
   }
