@@ -9,6 +9,7 @@ import { setupDiscordWebhookRoute } from './api/webhook-discord';
 import { connectToDatabase } from './lib/db';
 import productsRouter from './routes/products';
 import { activeConnections } from './ws/clients';
+import { BrowserThread } from './lib/db';
 
 const app = express();
 const server = http.createServer(app);
@@ -53,16 +54,26 @@ app.use('/api/products', productsRouter);
 setupWebSocket(server);
 
 // Add this route to your server.ts
-app.post('/api/inject', express.json(), (req, res) => {
-    const { browserId, message, sender = 'ai' } = req.body;
-    
+app.post('/api/inject', express.json(), async (req, res) => {
+    console.log('Inject request received:', req.body);
+    const { email, message, sender = 'ai' } = req.body;
+
     // Debug: Log all active connections
     console.log('Active connections:', Array.from(activeConnections.keys()));
-    console.log('Looking for browserId:', browserId);
-    if (!browserId || !message) {
-      return res.status(400).json({ error: 'Missing browserId or message' });
+    console.log('Looking for email:', email);
+
+    if (!email || !message) {
+      return res.status(400).json({ error: 'Missing email or message' });
     }
+    // now we need to find the browserid for this email
+    const browserThread = await BrowserThread.findOne({ email });
+    if (!browserThread) {
+      return res.status(400).json({ error: 'No active connection found for this email' });
+    }
+    const browserId = browserThread.browserId;
+    //check if browserid is in the browser_thread collection
     const ws = activeConnections.get(browserId);
+
     if (ws && ws.readyState === 1) { // 1 = WebSocket.OPEN
         ws.send(JSON.stringify({
             type: 'new_message',

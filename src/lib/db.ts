@@ -29,8 +29,18 @@ const messageSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 });
 
+// Add this schema for browser-thread mapping
+const browserThreadSchema = new mongoose.Schema({
+  email: { type: String, required: true },
+  name: { type: String, required: true },
+  browserId: { type: String, required: true },
+  threadId: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now }
+});
+
 export const StoreConfig = mongoose.model('StoreConfig', storeConfigSchema);
 export const Message = mongoose.model('Message', messageSchema);
+export const BrowserThread = mongoose.model('BrowserThread', browserThreadSchema);
 
 export async function connectToDatabase() {
   try {
@@ -52,5 +62,15 @@ export async function saveMessage(email: string, content: string, from: string) 
     threadId: email, // Using email as threadId for simplicity
     content,
     from
+  });
+}
+
+// Add this function to store thread info
+export async function storeBrowserThread(email: string, name: string, browserId: string, threadId: string) {
+  return BrowserThread.create({
+    email,
+    name,
+    browserId,
+    threadId
   });
 } 

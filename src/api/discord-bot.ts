@@ -17,7 +17,7 @@ const TOKEN = process.env.DISCORD_BOT_TOKEN!;
 const API_URL = process.env.CHAT_INJECT_API || 'http://localhost:3000/api/inject';
 
 // TEMP: Hardcoded browser ID for now
-const DEFAULT_BROWSER_ID = process.env.BROWSERID || 'browser-7483984b-dd38-47a3-bf04-a0a3ebd2e573'; // Replace this with an active browserId for testing
+//const DEFAULT_BROWSER_ID = process.env.BROWSERID || 'browser-7483984b-dd38-47a3-bf04-a0a3ebd2e573'; // Replace this with an active browserId for testing
 
 client.once('ready', () => {
   console.log(`🤖 Bot is online as ${client.user?.tag}`);
@@ -36,16 +36,17 @@ client.on('messageCreate', async (message) => {
       await message.reply('❌ Failed: Missing email address. Usage: `!push user@example.com Your message here`');
       return;
     }
+
+
     // Remove the email address from the content
     const messageBody = content.replace(emailRegex, '').trim();
-
 
     try {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          browserId: DEFAULT_BROWSER_ID,
+          email: email,
           message: messageBody,
           sender: 'agent'
         })
@@ -56,7 +57,8 @@ client.on('messageCreate', async (message) => {
         error?: string;
       }
       const result = await response.json() as InjectResponse;
-
+      console.log('Inject response:', result);  
+      
       if (response.ok) {
         await message.reply(`✅ Message sent to user. ${messageBody}`);
       } else {

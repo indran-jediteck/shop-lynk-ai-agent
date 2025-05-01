@@ -21,6 +21,7 @@
   function initLynkChat() {
     const shopDomain = window.location.hostname;
     let browserId = localStorage.getItem('lynk_browser_id');
+    let threadId = localStorage.getItem('lynk_thread_id');
     if (!browserId) {
       browserId = 'browser-' + crypto.randomUUID();
       localStorage.setItem('lynk_browser_id', browserId);
@@ -33,13 +34,15 @@
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}`;
       ws = new WebSocket(wsUrl);
+      console.log('Connecting to WebSocket:', wsUrl);
 
       ws.onopen = () => {
         console.log('WebSocket connected');
         ws.send(JSON.stringify({
           type: 'init',
           browserId: browserId,
-          userInfo: userInfo
+          userInfo: userInfo,
+          threadId: threadId,
         }));
       };
 
@@ -48,6 +51,13 @@
         console.log('Received message:', data);
 
         switch (data.type) {
+          case 'init_ack':
+            if (data.threadId) {
+              localStorage.setItem('lynk_thread_id', data.threadId);
+              threadId = data.threadId;
+              console.log('Thread ID set from server:', threadId);
+            }
+            break;
           case 'system_message':
             if (data.message === 'thinking') {
               if (!document.getElementById('typing-indicator')) {
@@ -61,7 +71,22 @@
                   border-radius: 15px 15px 15px 0;
                   margin-bottom: 10px;
                 `;
-                typingDiv.textContent = 'Typing...';
+                typingDiv.innerHTML = `
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="font-size: 14px; color: #666;">Thinking</div>
+                    <div style="display: flex; gap: 4px; align-items: center;">
+                      <span style="width: 8px; height: 8px; background: #888; border-radius: 50%; animation: blink 1s infinite ease-in-out;"></span>
+                      <span style="width: 8px; height: 8px; background: #888; border-radius: 50%; animation: blink 1s 0.2s infinite ease-in-out;"></span>
+                      <span style="width: 8px; height: 8px; background: #888; border-radius: 50%; animation: blink 1s 0.4s infinite ease-in-out;"></span>
+                    </div>
+                  </div>
+                  <style>
+                    @keyframes blink {
+                      0%, 80%, 100% { opacity: 0; }
+                      40% { opacity: 1; }
+                    }
+                  </style>
+                `;
                 messages.appendChild(typingDiv);
                 messages.scrollTop = messages.scrollHeight;
               }
@@ -73,6 +98,7 @@
             if (typingIndicator) typingIndicator.remove();
 
             const messageDiv = document.createElement('div');
+            messageDiv.style.margin = '0'; 
             messageDiv.style.cssText = `
               align-self: flex-start;
               background: #f0f0f0;
@@ -81,8 +107,13 @@
               border-radius: 15px 15px 15px 0;
               max-width: 80%;
               word-wrap: break-word;
+              margin: 0;
             `;
-            messageDiv.innerHTML = window.marked ? marked.parse(data.message) : data.message;
+            messageDiv.innerHTML = `
+              <div style="margin: 0; padding: 0;">
+                ${window.marked ? marked.parse(data.message) : data.message}
+              </div>
+            `;
             messages.appendChild(messageDiv);
             messages.scrollTop = messages.scrollHeight;
 
@@ -186,6 +217,8 @@
     // Clear localStorage and reload
     resetBtn.onclick = () => {
       localStorage.removeItem('lynk_chat_user');
+      localStorage.removeItem('lynk_browser_id');
+      localStorage.removeItem('lynk_thread_id');
       location.reload();
     };
 
@@ -306,7 +339,7 @@
         ws.send(JSON.stringify({
           type: 'user_message',
           message: message,
-          threadId: userInfo.email,
+          threadId: threadId,
           userInfo: userInfo
         }));
       }
@@ -383,13 +416,17 @@
       `;
 
       submitBtn.onclick = () => {
-        const name = nameInput.value.trim();
+        const name = nameInput.value.trim()
+          .split(' ')
+          .map(word => word.toLowerCase().replace(/^\w/, c => c.toUpperCase()))
+          .join(' ');
         const email = emailInput.value.trim();
         if (!name || !email) {
           alert("Please enter your name and email to start chatting.");
           return;
         }
         localStorage.setItem('lynk_chat_user', JSON.stringify({ name, email }));
+        userInfo = { name, email };  // 🔥 Update in memory too
         contentArea.innerHTML = ''; // reset inside scroll area
         contentArea.appendChild(messages);
         contentArea.appendChild(inputWrapper);

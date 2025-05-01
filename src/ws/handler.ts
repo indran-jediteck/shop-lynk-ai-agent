@@ -2,8 +2,9 @@ import { Server } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { activeConnections } from './clients';
 import { WebSocketMessage, InitMessage, UserMessage } from './types';
-import { processUserMessage } from '../lib/openai';
+import { processUserMessage, OpenAIService } from '../lib/openai';
 import dotenv from 'dotenv';
+import { storeBrowserThread } from '../lib/db';
 
 dotenv.config();
 
@@ -42,7 +43,7 @@ export function setupWebSocket(server: Server) {
         
         switch (message.type) {
           case 'init':
-            handleInit(ws, message as InitMessage);
+            await handleInit(ws, message as InitMessage);
             break;  
           case 'user_message':
             console.log('Received user message, passing to handler');
@@ -83,8 +84,9 @@ export function setupWebSocket(server: Server) {
   });
 }
 
-function handleInit(ws: WebSocket, message: InitMessage) {
-  console.log('Handling init message:', message);
+async function handleInit(ws: WebSocket, message: InitMessage) {
+  console.log('Handling init message ---:', message);
+
   if (activeConnections.has(message.browserId)) {
     console.log('BrowserId already registered. Skipping duplicate init.');
     return;
@@ -95,11 +97,26 @@ function handleInit(ws: WebSocket, message: InitMessage) {
     return;
   }
 
+  // check if threadid from front end is not null
+  if (message.threadId) {
+    console.log('ThreadId already exists. Skipping duplicate init.');
+  }else{
+    //threadid is null then make openai call to create a thread
+    console.log('ThreadId does not  exists. creating a new one ');
+    const openaiService = new OpenAIService();
+    message.threadId = await openaiService.createThreadWithContext(message.userInfo);
+    console.log('ThreadId created:', message.threadId);
+    //we need to store this in mongo for api/inject to look it up no?
+    //store in mongo with email, name , browserid and threadid shopify_browser_thread collection  
+    await storeBrowserThread(message.userInfo.email, message.userInfo.name, message.browserId, message.threadId);
+  }
+
   activeConnections.set(message.browserId, ws);
 
   ws.send(JSON.stringify({
-    type: 'system_message',
+    type: 'init_ack',
     browserId: message.browserId,
+    threadId: message.threadId,
     message: 'Connection established'
   }));
 

@@ -26,8 +26,9 @@ export async function processUserMessage(threadId: string, content: string): Pro
     console.log('Thread ID:', threadId);
     
     const openaiService = new OpenAIService();
-    const openaiThreadId = await openaiService.getOrCreateThread(threadId);
+    const openaiThreadId = threadId;
     const response = await openaiService.sendMessage(openaiThreadId, content);
+    console.log('OpenAI response:', response);
     return response;
   } catch (error) {
     console.error('Error processing message:', error);
@@ -245,5 +246,17 @@ export class OpenAIService {
       return newThreadId;
     }
     return this.threads.get(threadId)!;
+  }
+
+  public async createThreadWithContext(userInfo: { name: string; email: string }): Promise<string> {
+    const thread = await this.client.beta.threads.create();
+    const systemMessage = `New session started for user with first name ${userInfo.name} and email (${userInfo.email})`;
+    console.log('System message:', systemMessage);
+    await this.client.beta.threads.messages.create(thread.id, {
+      role: 'assistant',
+      content: systemMessage
+    });
+
+    return thread.id;
   }
 } 
