@@ -91,7 +91,7 @@ app.post('/api/inject', express.json(), async (req, res) => {
     } else {
       //lets send email to this user with a copy to the storeowners email address also 
       const storeOwnerEmail = process.env.customer_email;
-      await emailService.sendEmail(email, 'Copy of your message', message, storeOwnerEmail);
+      await emailService.sendEmail(email, 'JCS Fashions', message, storeOwnerEmail);
       res.json({ success: true, message: 'email sent to user. Email sent to store owner' });
     }
 });

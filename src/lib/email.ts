@@ -28,10 +28,11 @@ class EmailService {
     try {
       console.log('Sending email to:', to , 'with subject:', subject, 'and message:', message, 'and cc:', cc);  
       const mailOptions = {
-        from: process.env.SMTP_FROM_EMAIL,
+        from: `JCS Fashions <${cc}>`,
         to,
+        replyTo: cc,
         cc,
-        subject,
+        subject: `${subject}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #5C6AC4;">Message from JCS Fashions</h2>
