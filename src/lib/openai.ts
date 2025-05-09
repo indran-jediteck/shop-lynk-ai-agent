@@ -11,6 +11,8 @@ const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
 
 if (!ASSISTANT_ID) {
   throw new Error('OPENAI_ASSISTANT_ID environment variable is not set');
+}else{
+  console.log('ASSISTANT_ID:', ASSISTANT_ID);
 }
 
 // Map to store thread IDs
@@ -24,7 +26,7 @@ export async function processUserMessage(threadId: string, content: string): Pro
   try {
     console.log('Processing user message:', content);
     console.log('Thread ID:', threadId);
-    
+    console.log('ASSISTANT_ID:', ASSISTANT_ID);
     const openaiService = new OpenAIService();
     const openaiThreadId = threadId;
     const response = await openaiService.sendMessage(openaiThreadId, content);
