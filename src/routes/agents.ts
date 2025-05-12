@@ -43,7 +43,7 @@ export const crawlAndStore = async (startUrl: string) => {
     const visited = new Set<string>();
     const MAX_PAGES = 100;
     const mongoUri = process.env.MONGODB_URI;
-    console.log("MONGO_URI: ", mongoUri);
+    //console.log("MONGO_URI: ", mongoUri);
     if (!mongoUri) {
       throw new Error("MONGO_URI is not set");
     }else{
@@ -59,7 +59,7 @@ export const crawlAndStore = async (startUrl: string) => {
     let fullText = '';
   
     const crawl = async (url: string) => {
-      console.log("Crawling: ", url, "Visited: ", visited.size);
+      //console.log("Crawling: ", url, "Visited: ", visited.size);
       if (visited.size >= MAX_PAGES || visited.has(url)) return;
       visited.add(url);
   
@@ -159,25 +159,52 @@ async function parseQuestions(questions: string) {
         parsedQuestions = [questions]; // fallback
         }
 
-        // Now safely iterate
-        for (const question of parsedQuestions) {
-        console.log("--------------------------------");
-        console.log(question);
-        console.log("--------------------------------");
-        }
+          // // Now safely iterate
+          // for (const question of parsedQuestions) {
+          // console.log("--------------------------------");
+          // console.log(question);
+          // console.log("--------------------------------");
+          // }
     return parsedQuestions;
     };
 
+async function cleanUpAssistant(url: string) {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) {
+        throw new Error("MONGO_URI is not set");
+    }
+    const client = new MongoClient(mongoUri);
+    await client.connect();
+    const db = client.db();
+    const collection = db.collection('scraped_sites');
+    const result = await collection.findOne({ url: url });
+    //console.log(result);
+    if(result){
+        const assistantId = result.assistantId;
+        const fileId = result.fileId;
+        const vectorStoreId = result.vectorStoreId;
+        await Openai.beta.assistants.del(assistantId);
+        await Openai.files.del(fileId);
+        await Openai.vectorStores.del(vectorStoreId);
+        await collection.deleteOne({ url: url });
+    }
+}
 
+
+router.post('/cleanup', async (req, res) => {
+    const { url } = req.body;
+    await cleanUpAssistant(url);
+    res.json({ message: 'Assistant cleaned up' });
+});
 
 // Create agent endpoint
 router.post('/create', async (req, res) => {
     const { url } = req.body;
-    console.log(url);
+    console.log('starting to create agent for', url);
     //extract the domain from the url
     const domain = new URL(url).hostname;
     const baseDomain = domain.split('.').slice(-2, -1)[0]; // gets second-to-last part
-    console.log(baseDomain); 
+   // console.log(baseDomain); 
     if (url && isValidUrl(url)) {
       //search for the url in the mongo db
       const mongoUri = process.env.MONGODB_URI;
@@ -204,7 +231,7 @@ router.post('/create', async (req, res) => {
         summary = summaryResult;
         const questionsResult = await getChatResponseQuestions(summary);
         questions = questionsResult || '';
-        console.log(questions);
+        //console.log(questions);
         content = await crawlAndStore(url);
         await collection.updateOne(
           { url },
@@ -229,13 +256,13 @@ router.post('/create', async (req, res) => {
         file: new File([content || ''], `${baseDomain}.txt`, { type: 'text/plain' }),
         purpose: 'assistants',
       });
-      console.log('Uploaded file ID:', file.id);   
+      //console.log('Uploaded file ID:', file.id);   
 
       const vectorStore = await Openai.vectorStores.create({
         name: `${baseDomain}`,
         file_ids: [file.id], // Replace with your actual file IDs
       });
-      console.log('Vector store created:', vectorStore);
+      //console.log('Vector store created:', vectorStore);
       const systemPrompt = await getSystemPrompt(summary);
       const assistant = await Openai.beta.assistants.create({
         name: `${baseDomain}`,
@@ -248,9 +275,9 @@ router.post('/create', async (req, res) => {
           },
         },
       });
-      console.log('Assistant created:', assistant);
+      //console.log('Assistant created:', assistant);
 
-      console.log(questions);
+      //console.log(questions);
       const parsedQuestions = await parseQuestions(questions || '');
       const thread = await Openai.beta.threads.create();
       const threadId = thread.id;
@@ -271,7 +298,7 @@ router.post('/create', async (req, res) => {
             assistant_id: assistantId,
         });
           
-        console.log(`Run started for question: "${question}" => Run ID: ${run.id}`);
+        //console.log(`Run started for question: "${question}" => Run ID: ${run.id}`);
         
         // 3. Poll for completion
         let status = run.status;
