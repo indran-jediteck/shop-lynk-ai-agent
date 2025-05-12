@@ -202,7 +202,9 @@ router.post('/create', async (req, res) => {
             throw new Error('Failed to get summary');
         }
         summary = summaryResult;
-        const questions = await getChatResponseQuestions(summary);
+        const questionsResult = await getChatResponseQuestions(summary);
+        questions = questionsResult || '';
+        console.log(questions);
         content = await crawlAndStore(url);
         await collection.updateOne(
           { url },
@@ -254,8 +256,11 @@ router.post('/create', async (req, res) => {
       const threadId = thread.id;
       const assistantId = assistant.id;
       let transcript = '';
+      //print the question number and question
+      let questionNumber = 1;
       for (const question of parsedQuestions) {
-        console.log(question);
+        console.log(`${questionNumber}. ${question}`);
+        questionNumber++;
         await Openai.beta.threads.messages.create(threadId, {
             role: 'user',
             content: question,
@@ -282,12 +287,19 @@ router.post('/create', async (req, res) => {
         const last = messages.data.find((m) => m.role === 'assistant');
         const content = last?.content[0];
         const response = content && 'text' in content ? content.text.value : 'No response';
-        console.log(`💬 Assistant: ${response}`);
+//        console.log(`💬 Assistant: ${response}`);
         transcript += `Q: ${question}\nA: ${response}\n\n`;
         }
         await collection.updateOne(
             { url }, // or another selector
-            { $set: { Q_A: transcript } }
+            { $set: { Q_A: transcript,
+                      assistantId: assistantId,
+                      fileId: file.id,
+                      vectorStoreId: vectorStore.id,
+                      crawledAt: new Date(),
+                    } 
+            },
+            { upsert: true }
           );
 
         res.json({  
