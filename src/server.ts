@@ -11,6 +11,7 @@ import productsRouter from './routes/products';
 import { activeConnections } from './ws/clients';
 import { BrowserThread } from './lib/db';
 import { emailService } from './lib/email';
+import agentsRouter from './routes/agents';
 
 const app = express();
 const server = http.createServer(app);
@@ -23,6 +24,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 app.use(express.json());
+app.use('/api/agents', agentsRouter);
 
 // Health check route
 app.get('/health', (req, res) => {
