@@ -32,7 +32,9 @@
 
     function connectWebSocket() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}`;
+      //const wsUrl = `${protocol}//${window.location.host}`;
+      //const wsUrl = `wss://6b9c-2601-647-5500-6530-c4c-b092-a42e-4a71.ngrok-free.app`;
+      const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
       ws = new WebSocket(wsUrl);
       console.log('Connecting to WebSocket:', wsUrl);
 
@@ -160,10 +162,6 @@
         console.error('WebSocket error:', error);
       };
     }
-
-
-
-
     const modal = document.createElement('div');
     modal.id = 'lynk-chat-modal';
     Object.assign(modal.style, {
@@ -175,7 +173,7 @@
       zIndex: 9998,
       borderRadius: '10px',
       overflow: 'visible', // 🔥 very important - NOT 'auto' here
-      width: '400px',
+      width: '500px',
       height: 'auto',
       maxHeight: '90vh',
       bottom: '90px',
@@ -478,7 +476,7 @@
         modal.style.right = '0';
         modal.style.borderRadius = '0';
       } else {
-        modal.style.width = '400px';
+        modal.style.width = '500px';
         modal.style.maxHeight = '90vh';
         modal.style.height = 'auto';
         modal.style.bottom = '90px';
