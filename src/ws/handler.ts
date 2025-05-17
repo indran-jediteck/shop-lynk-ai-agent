@@ -130,9 +130,9 @@ async function handleInit(ws: WebSocket, message: InitMessage) {
       { text: 'Return/Exchange', prompt: 'What is the return policy?' },
       { text: 'Schedule appointment', prompt: 'I would like to schedule an appointment' },
       { text: 'Studio hours', prompt: 'What are your studio hours?' },
-      { text: 'Contact support', prompt: 'I need to speak with customer support' },
-      { text: 'Check my order', prompt: 'Can you help me check the status of my order?' },
-      { text: 'Product question', prompt: 'I have a question about a product' }
+      { text: 'Contact support', prompt: 'I need to speak with customer support' }
+//      { text: 'Check my order', prompt: 'Can you help me check the status of my order?' },
+//      { text: 'Product question', prompt: 'I have a question about a product' }
     ]
   }))
 
