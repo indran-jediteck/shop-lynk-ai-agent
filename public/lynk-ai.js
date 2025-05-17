@@ -174,9 +174,10 @@
       boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
       zIndex: 9998,
       borderRadius: '10px',
-      overflow: 'hidden', // 🔥 very important - NOT 'auto' here
+      overflow: 'visible', // 🔥 very important - NOT 'auto' here
       width: '400px',
-      height: '600px',
+      height: 'auto',
+      maxHeight: '90vh',
       bottom: '90px',
       right: '20px',
     });
@@ -256,7 +257,7 @@
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'hidden', // Not scroll entire contentArea, only inside messages
+      overflow: 'auto', // Not scroll entire contentArea, only inside messages
     });
 
     // Then append like this:
@@ -475,7 +476,8 @@
         modal.style.borderRadius = '0';
       } else {
         modal.style.width = '400px';
-        modal.style.height = '600px';
+        modal.style.maxHeight = '90vh';
+        modal.style.height = 'auto';
         modal.style.bottom = '90px';
         modal.style.right = '20px';
         modal.style.borderRadius = '10px';
