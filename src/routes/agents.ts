@@ -109,9 +109,9 @@ const response = await Openai.chat.completions.create({
 return response.choices[0].message.content;
 };
 
-async function getChatResponseQuestions(Summary: string) {
+async function getChatResponseQuestions(Summary: string, numberOfQuestions: number = 10) {
     const response = await Openai.chat.completions.create({
-        model: 'gpt-4o-mini', // You can also use 'gpt-3.5-turbo' or other available models
+        model: 'gpt-4o-mini',
         messages: [
         {
             role: 'system',
@@ -119,29 +119,29 @@ async function getChatResponseQuestions(Summary: string) {
         },
         {
             role: 'user',
-            content: `generate a list of 50 questions that a customer would ask to a company like this , including basic questions like name, address, phone number, email, and return the questions as a json object and only return the json object:\n\n${Summary}`,
+            content: `generate a list of ${numberOfQuestions} questions that a customer would ask to a company like this , including basic questions like name, address, phone number, email, and return the questions as a json object and only return the json object:\n\n${Summary}`,
         },
         ],
     });
     return response.choices[0].message.content;
-    };
+};
 
-    async function getSystemPrompt(Summary: string) {
-        const response = await Openai.chat.completions.create({
-            model: 'gpt-4o-mini', // You can also use 'gpt-3.5-turbo' or other available models
-            messages: [
-            {
-                role: 'system',
-                content: 'You a AI assistant prompt generator.',
-            },
-            {
-                role: 'user',
-                content: `Generate a system prompt for a AI assistant with a cool name for a company like this add instructions to not hallucinate and only answer from the attached file and source:\n\n${Summary}`,
-            },
-            ],
-        });
-        return response.choices[0].message.content;
-        };
+  async function getSystemPrompt(Summary: string) {
+      const response = await Openai.chat.completions.create({
+          model: 'gpt-4o-mini', // You can also use 'gpt-3.5-turbo' or other available models
+          messages: [
+          {
+              role: 'system',
+              content: 'You a AI assistant prompt generator.',
+          },
+          {
+              role: 'user',
+              content: `Generate a system prompt for a AI assistant with a cool name for a company like this add instructions to not hallucinate and only answer from the attached file and source:\n\n${Summary}`,
+          },
+          ],
+      });
+      return response.choices[0].message.content;
+      };
 
 
 async function parseQuestions(questions: string) {
@@ -229,7 +229,8 @@ router.post('/create', async (req, res) => {
             throw new Error('Failed to get summary');
         }
         summary = summaryResult;
-        const questionsResult = await getChatResponseQuestions(summary);
+        let numberOfQuestions = 25;
+        const questionsResult = await getChatResponseQuestions(summary,numberOfQuestions);
         questions = questionsResult || '';
         //console.log(questions);
         content = await crawlAndStore(url);
@@ -284,7 +285,9 @@ router.post('/create', async (req, res) => {
       const assistantId = assistant.id;
       let transcript = '';
       //print the question number and question
-      let questionNumber = 1;
+      console.log(parsedQuestions);
+      let questionNumber = 1;     
+
       for (const question of parsedQuestions) {
         console.log(`${questionNumber}. ${question}`);
         questionNumber++;
@@ -292,7 +295,7 @@ router.post('/create', async (req, res) => {
             role: 'user',
             content: question,
         });
-        
+      
         // 2. Start assistant run
         const run = await Openai.beta.threads.runs.create(threadId, {
             assistant_id: assistantId,
@@ -307,6 +310,7 @@ router.post('/create', async (req, res) => {
             await new Promise((resolve) => setTimeout(resolve, 1500));
             runResult = await Openai.beta.threads.runs.retrieve(threadId, run.id);
             status = runResult.status;
+            console.log(status);
         }
           
         // 4. Get assistant's reply
@@ -314,9 +318,10 @@ router.post('/create', async (req, res) => {
         const last = messages.data.find((m) => m.role === 'assistant');
         const content = last?.content[0];
         const response = content && 'text' in content ? content.text.value : 'No response';
-//        console.log(`💬 Assistant: ${response}`);
+        console.log(`💬 Assistant: ${response}`);
         transcript += `Q: ${question}\nA: ${response}\n\n`;
         }
+
         await collection.updateOne(
             { url }, // or another selector
             { $set: { Q_A: transcript,
@@ -482,5 +487,151 @@ router.post('/createdoc', async (req, res) => {
     res.send(buffer);
   });
 
+router.post('/countassistantsdev', async (req, res) => {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) throw new Error("MONGO_URI is not set");
+    const client = new MongoClient(mongoUri);
+    await client.connect();
+    const db = client.db();
+    const collection = db.collection('assistants');
+    const result = await collection.find({}).toArray();
+    console.log(result.length);
+    for (const assistant of result) {
+      console.log(assistant.name, assistant.created, assistant.userEmail,assistant.assistantId,assistant.createdAt);
+      const cleaned = await cleanUpAssistantwithid(assistant);
+      if(cleaned){
+        await collection.deleteOne({ assistantId: assistant.assistantId });
+      }
+    }
+    res.json({ message: 'Count of assistants: ' + result.length });
+
+  });
+
+async function cleanUpAssistantwithid(assistant: any) {
+  try{
+    const assistantId = assistant.assistantId;
+    const fileId = assistant.fileId;
+    const vectorStoreId = assistant.vectorStoreId;
+    await Openai.beta.assistants.del(assistantId);
+    await Openai.files.del(fileId);
+    await Openai.vectorStores.del(vectorStoreId);
+    console.log('Cleaned up assistant: ', assistantId);
+    return true;
+  }catch(error){
+    console.error('Error cleaning up assistant: ', error)
+    return false;
+  }
+}
+
+router.post('/cleanuporphans', async (req, res) => {
+  try {
+    const orphanedFileIds = new Set<string>();
+    const usedFileIds = new Set<string>();
+
+    // 1. Get all assistants and their linked vector store IDs
+    const assistants = await Openai.beta.assistants.list();
+    const activeVectorStoreIds = new Set(
+      assistants.data.flatMap(a =>
+        a.tool_resources?.file_search?.vector_store_ids || []
+      )
+    );
+
+    // 2. Get all vector stores
+    const vectorStores = await Openai.vectorStores.list();
+
+    for (const vs of vectorStores.data) {
+      const vsId = vs.id;
+
+      if (!activeVectorStoreIds.has(vsId)) {
+        // Orphaned vector store: collect its files and delete it
+        const files = await Openai.vectorStores.files.list(vsId);
+        files.data.forEach(file => orphanedFileIds.add(file.id));
+
+        await Openai.vectorStores.del(vsId);
+        console.log(`🗑️ Deleted orphaned vector store: ${vsId}`);
+      } else {
+        // Still in use: track its files
+        const files = await Openai.vectorStores.files.list(vsId);
+        files.data.forEach(file => usedFileIds.add(file.id));
+      }
+    }
+
+    // 3. Get all files
+    const allFiles = await Openai.files.list();
+
+    // 4. Delete files that were in orphaned vector stores but aren't used anywhere else
+    for (const file of allFiles.data) {
+      if (!usedFileIds.has(file.id) && orphanedFileIds.has(file.id)) {
+        await Openai.files.del(file.id);
+        console.log(`🗑️ Deleted orphaned file: ${file.id}`);
+      }
+    }
+
+    res.json({ message: '✅ Cleanup complete.' });
+  } catch (error: any) {
+    console.error('❌ Cleanup failed:', error);
+    res.status(500).json({ error: 'Cleanup failed', details: error?.message });
+  }
+});
+
+router.post('/cleanup/assistants/from-mongo-devenv', async (req, res) => {
+  const deleted = [];
+
+  try {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) throw new Error("MONGO_URI is not set");
+    const client = await MongoClient.connect(mongoUri);
+    const db = client.db(); // default DB
+    const assistantsCollection = db.collection('assistants');
+
+    const assistants = await assistantsCollection.find({}).toArray();
+
+    for (const record of assistants) {
+      const assistantId = record.assistantId;
+      if (!assistantId) continue;
+
+      try {
+        // Fetch assistant details from OpenAI
+        const assistant = await Openai.beta.assistants.retrieve(assistantId);
+
+        // Delete assistant
+        await Openai.beta.assistants.del(assistantId);
+        console.log(`🗑️ Deleted assistant: ${assistantId}`);
+
+        const vectorStoreIds = assistant.tool_resources?.file_search?.vector_store_ids || [];
+
+        for (const vsId of vectorStoreIds) {
+          try {
+            const files = await Openai.vectorStores.files.list(vsId);
+            await Openai.vectorStores.del(vsId);
+            console.log(`🗑️ Deleted vector store: ${vsId}`);
+
+            for (const file of files.data) {
+              try {
+                await Openai.files.del(file.id);
+                console.log(`🗑️ Deleted file: ${file.id}`);
+              } catch (err: unknown) {
+                console.warn(`⚠️ Failed to delete file ${file.id}:`, err instanceof Error ? err.message : 'Unknown error');
+              }
+            }
+          } catch (err: unknown) {
+            console.warn(`⚠️ Failed to delete vector store ${vsId}:`, err instanceof Error ? err.message : 'Unknown error');
+          }
+        }
+
+        deleted.push(assistantId);
+
+      } catch (err: unknown) {
+        console.warn(`⚠️ Failed to delete assistant ${assistantId}:`, err instanceof Error ? err.message : 'Unknown error');
+      }
+    }
+
+    await client.close();
+    res.json({ message: '✅ Cleanup complete', deletedAssistants: deleted });
+  } catch (error: unknown) {
+    console.error('❌ Cleanup failed:', error);
+    res.status(500).json({ error: 'Cleanup failed', details: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
 
 export default router;
