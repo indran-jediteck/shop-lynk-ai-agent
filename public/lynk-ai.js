@@ -258,6 +258,8 @@
       display: 'flex',
       flexDirection: 'column',
       overflow: 'auto', // Not scroll entire contentArea, only inside messages
+      transition: 'min-height 0.3s ease',
+      minHeight: '600px', // <-- add this line
     });
 
     // Then append like this:
@@ -336,7 +338,7 @@
 
     // Correct order of elements
     bottomContainer.appendChild(inputWrapper);
-    bottomContainer.appendChild(poweredByFooter);
+//    bottomContainer.appendChild(poweredByFooter);
 
     // Add elements to content area in correct order
     contentArea.appendChild(messages);
@@ -465,7 +467,8 @@
       formWrapper.appendChild(infoText);
 
       contentArea.appendChild(formWrapper);
-      contentArea.appendChild(bottomContainer); // Add the bottom container with input and footer
+      contentArea.appendChild(poweredByFooter);
+      //contentArea.appendChild(bottomContainer); // Add the bottom container with input and footer
     }
     function adjustModalSize() {
       if (window.innerWidth < 768) {
@@ -519,6 +522,7 @@
       // Assume messages and inputWrapper are globally available or defined
       contentArea.appendChild(messages);
       contentArea.appendChild(bottomContainer);
+      contentArea.appendChild(poweredByFooter);
       connectWebSocket();
     }
   }
