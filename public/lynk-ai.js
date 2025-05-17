@@ -471,7 +471,8 @@
     function adjustModalSize() {
       if (window.innerWidth < 768) {
         modal.style.width = '100%';
-        modal.style.height = '100%';
+        modal.style.height = '100vh';
+        modal.style.maxHeight = '100vh';
         modal.style.bottom = '0';
         modal.style.right = '0';
         modal.style.borderRadius = '0';
