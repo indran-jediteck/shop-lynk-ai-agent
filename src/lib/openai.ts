@@ -30,6 +30,12 @@ export async function processUserMessage(threadId: string, content: string): Pro
     const openaiService = new OpenAIService();
     const openaiThreadId = threadId;
     const response = await openaiService.sendMessage(openaiThreadId, content);
+    
+    // If the response is our "hold on" message, return it directly
+    if (response === "Hold on, still working on your last request...") {
+      return response;
+    }
+    
     console.log('OpenAI response:', response);
     return response;
   } catch (error) {
@@ -169,25 +175,48 @@ export class OpenAIService {
 
   public async sendMessage(threadId: string, message: string): Promise<string> {
     try {
-      // Add message to thread
-      await this.client.beta.threads.messages.create(threadId, {
-        role: 'user',
-        content: message,
-      });
-
-      // Create and run
+      // Step 1: Check for any active run
+      const runs = await this.client.beta.threads.runs.list(threadId);
+      const activeRun = runs.data.find(run => 
+        run.status === 'in_progress' || 
+        run.status === 'queued' || 
+        run.status === 'requires_action'
+      );
+  
+      if (activeRun) {
+        console.log('Active run found:', activeRun.id, 'with status:', activeRun.status);
+        return "Hold on, still working on your last request...";
+      }
+  
+      // Step 2: Add message to thread
+      try {
+        await this.client.beta.threads.messages.create(threadId, {
+          role: 'user',
+          content: message,
+        });
+      } catch (error) {
+        // If we get the "can't add messages" error, return wait message
+        if (error instanceof Error && 
+            error.message.includes("Can't add messages to thread") && 
+            error.message.includes("while a run is active")) {
+          return "Hold on, still working on your last request...";
+        }
+        throw error; // Re-throw other errors
+      }
+  
+      // Step 3: Create and run
       const run = await this.client.beta.threads.runs.create(threadId, {
         assistant_id: this.assistantId,
       });
-
-      // Wait for completion with timeout
-      const maxAttempts = 30; // 30 seconds timeout
+  
+      // Step 4: Wait for completion (same as before)
+      const maxAttempts = 30;
       let attempts = 0;
       let runStatus = await this.client.beta.threads.runs.retrieve(threadId, run.id);
-      
+  
       while (runStatus.status !== 'completed' && attempts < maxAttempts) {
         console.log('Run status:', runStatus.status);
-
+  
         if (runStatus.status === 'failed') {
           throw new Error('Assistant run failed: ' + runStatus.last_error?.message);
         }
@@ -200,44 +229,55 @@ export class OpenAIService {
             await this.handleToolCalls(threadId, run.id, toolCalls);
           }
         }
-        
+  
         await new Promise(resolve => setTimeout(resolve, 1000));
         runStatus = await this.client.beta.threads.runs.retrieve(threadId, run.id);
         attempts++;
       }
-
+  
       if (attempts >= maxAttempts) {
         throw new Error('Response timeout: The assistant took too long to respond');
       }
-
-      // Get the assistant's response
+  
+      // Step 5: Get assistant's response
       const messages = await this.client.beta.threads.messages.list(threadId);
       const assistantMessage = messages.data.find(m => m.role === 'assistant');
       
       if (!assistantMessage) {
         throw new Error('No response received from assistant');
       }
-
-      // Process all content blocks
+  
+      // Step 6: Extract text response
       let responseText = '';
       for (const content of assistantMessage.content) {
         if (isTextContent(content)) {
           responseText += content.text.value + '\n';
         }
       }
-
-      // Clean up the response
-      responseText = responseText.trim();
-      console.log('Assistant response:', responseText);
-
+  
+      responseText = responseText
+        .trim()
+        .replace(/【.*?】/g, '')
+        .replace(/\d+:\d+†source/g, '');
+  
       if (!responseText) {
         throw new Error('Empty response from assistant');
       }
-
+  
       return responseText;
+  
     } catch (error) {
       console.error('Error in sendMessage:', error);
-      throw error; // Re-throw to be handled by processUserMessage
+      
+      // Type check the error before accessing message
+      if (error instanceof Error && (
+          (error.message.includes("Can't add messages to thread") && error.message.includes("while a run is active")) ||
+          error.message.includes("already has an active run")
+      )) {
+        return "Hold on, still working on your last request...";
+      }
+      
+      throw error; // Re-throw other errors to be handled by processUserMessage
     }
   }
 
