@@ -157,7 +157,7 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
     ws.send(JSON.stringify({
       type: 'system_message',
       threadId: threadId,
-      message: 'thinking'
+      message: 'Typing'
     }));
 
     // Process the message

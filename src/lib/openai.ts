@@ -199,7 +199,7 @@ export class OpenAIService {
         if (error instanceof Error && 
             error.message.includes("Can't add messages to thread") && 
             error.message.includes("while a run is active")) {
-          return "Hold on, still working on your last request...";
+          return "Hold on, still working on your last request";
         }
         throw error; // Re-throw other errors
       }

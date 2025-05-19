@@ -22,6 +22,7 @@
     const shopDomain = window.location.hostname;
     let browserId = localStorage.getItem('lynk_browser_id');
     let threadId = localStorage.getItem('lynk_thread_id');
+    let isRunActive = false;
     if (!browserId) {
       browserId = 'browser-' + crypto.randomUUID();
       localStorage.setItem('lynk_browser_id', browserId);
@@ -29,6 +30,49 @@
 
     let userInfo = JSON.parse(localStorage.getItem('lynk_chat_user') || '{}');
     let ws; 
+    const allowedMessages = ['Typing', 'Hold on, still working on your last request', 'Fetching data', 'Processing', 'Working on it'];    
+
+    function showStatusMessage(message) {
+      const existingIndicator = document.getElementById('system-indicator');
+      if (existingIndicator) {
+        existingIndicator.remove(); // Remove old one to force re-render
+      }
+    
+      const uniqueClass = `blink-${Date.now()}`; // 🔥 unique class to force re-render
+    
+      const indicatorDiv = document.createElement('div');
+      indicatorDiv.id = 'system-indicator';
+      indicatorDiv.style.cssText = `
+        align-self: flex-start;
+        background: #f5f5f5;
+        color: #555;
+        padding: 10px 15px;
+        border-radius: 15px 15px 15px 0;
+        margin-bottom: 10px;
+      `;
+    
+      indicatorDiv.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-size: 14px;">${message}</div>
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <span class="${uniqueClass}" style="width: 6px; height: 6px; background: #999; border-radius: 50%; animation: blink 1s infinite ease-in-out;"></span>
+            <span class="${uniqueClass}" style="width: 6px; height: 6px; background: #999; border-radius: 50%; animation: blink 1s 0.2s infinite ease-in-out;"></span>
+            <span class="${uniqueClass}" style="width: 6px; height: 6px; background: #999; border-radius: 50%; animation: blink 1s 0.4s infinite ease-in-out;"></span>
+          </div>
+        </div>
+        <style>
+          @keyframes blink {
+            0%, 80%, 100% { opacity: 0; }
+            40% { opacity: 1; }
+          }
+        </style>
+      `;
+    
+      messages.appendChild(indicatorDiv);
+      messages.scrollTop = messages.scrollHeight;
+    }
+    
+    
 
     function connectWebSocket() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -51,7 +95,17 @@
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         console.log('Received message:', data);
-
+         // 🔥 NEW universal error check block before switch
+        if (
+          data.message &&
+          typeof data.message === 'string' &&
+          data.message.includes("Can't add messages to") &&
+          data.message.includes("while a run")
+        ) {
+          isRunActive = true;
+          showStatusMessage("Hold on, still working on your last request");
+          return;
+        }
         switch (data.type) {
           case 'init_ack':
             if (data.threadId) {
@@ -61,44 +115,33 @@
             }
             break;
           case 'system_message':
-            if (data.message === 'thinking') {
-              if (!document.getElementById('typing-indicator')) {
-                const typingDiv = document.createElement('div');
-                typingDiv.id = 'typing-indicator';
-                typingDiv.style.cssText = `
-                  align-self: flex-start;
-                  background: #f0f0f0;
-                  color: #666;
-                  padding: 10px 15px;
-                  border-radius: 15px 15px 15px 0;
-                  margin-bottom: 10px;
-                `;
-                typingDiv.innerHTML = `
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <div style="font-size: 14px; color: #666;">Thinking</div>
-                    <div style="display: flex; gap: 4px; align-items: center;">
-                      <span style="width: 8px; height: 8px; background: #888; border-radius: 50%; animation: blink 1s infinite ease-in-out;"></span>
-                      <span style="width: 8px; height: 8px; background: #888; border-radius: 50%; animation: blink 1s 0.2s infinite ease-in-out;"></span>
-                      <span style="width: 8px; height: 8px; background: #888; border-radius: 50%; animation: blink 1s 0.4s infinite ease-in-out;"></span>
-                    </div>
-                  </div>
-                  <style>
-                    @keyframes blink {
-                      0%, 80%, 100% { opacity: 0; }
-                      40% { opacity: 1; }
-                    }
-                  </style>
-                `;
-                messages.appendChild(typingDiv);
-                messages.scrollTop = messages.scrollHeight;
-              }
-            }
+            if (!allowedMessages.includes(data.message)) break;
+            isRunActive = true;
+            showStatusMessage(data.message);
             break;
 
           case 'new_message':
             const typingIndicator = document.getElementById('typing-indicator');
             if (typingIndicator) typingIndicator.remove();
+            isRunActive = false;
+            // Check if the message is one of our status messages
+            if (allowedMessages.includes(data.message)) {
+              showStatusMessage(data.message);
+              return; // Don't proceed with normal message handling
+            }
 
+            // Only remove system indicator if we're not showing a status message
+            const systemIndicator = document.getElementById('system-indicator');
+            if (systemIndicator) systemIndicator.remove();
+
+            // Check if it's an error message about active run
+            if (data.message.includes("Can't add messages to") && data.message.includes("while a run is active")) {
+              showStatusMessage("Hold on, still working on your last request...");
+              return; // Don't proceed with normal message handling
+            }
+            isRunActive = false;
+            sendBtn.disabled = false;
+            chatInput.disabled = false;
             const messageDiv = document.createElement('div');
             messageDiv.style.margin = '0'; 
             messageDiv.style.cssText = `
@@ -159,7 +202,17 @@
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        const errorMessage = error?.message || error.toString();
+      
+        if (
+          errorMessage.includes("Can't add messages to") &&
+          errorMessage.includes("while a run")
+        ) {
+          showStatusMessage("Hold on, still working on your last request");
+          return;
+        }
+      
+        console.error("WebSocket error:", error);
       };
     }
     const modal = document.createElement('div');
@@ -344,9 +397,17 @@
 
     function sendMessage() {
       const message = chatInput.value.trim();
-      if (!message) return;
+      if (!message || isRunActive) {
+        if (isRunActive) {
+          showStatusMessage("Hold on, still working on your last request");
+        }
+        chatInput.value = '';
+        return;
+      }
       chatInput.value = '';
-
+      isRunActive = true;
+      sendBtn.disabled = true;
+      chatInput.disabled = true;
       const userMessageDiv = document.createElement('div');
       userMessageDiv.style.cssText = `
         align-self: flex-end;
