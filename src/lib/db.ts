@@ -67,10 +67,19 @@ export async function saveMessage(email: string, content: string, from: string) 
 
 // Add this function to store thread info
 export async function storeBrowserThread(email: string, name: string, browserId: string, threadId: string) {
-  return BrowserThread.create({
-    email,
-    name,
-    browserId,
-    threadId
-  });
+  return BrowserThread.findOneAndUpdate(
+    { email }, // find by email
+    { 
+      email,
+      name,
+      browserId,
+      threadId,
+      timestamp: new Date() // update timestamp on each update
+    },
+    { 
+      upsert: true, // create if doesn't exist
+      new: true, // return the updated document
+      setDefaultsOnInsert: true // apply schema defaults on insert
+    }
+  );
 } 
