@@ -74,9 +74,9 @@
 
     function connectWebSocket() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      //const wsUrl = `${protocol}//${window.location.host}`;
+      const wsUrl = `${protocol}//${window.location.host}`;
       //const wsUrl = `wss://5569-2601-647-5500-6530-b50e-d9de-bd9e-48fc.ngrok-free.app`;
-      const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
+      //const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
       ws = new WebSocket(wsUrl);
       console.log('Connecting to WebSocket:', wsUrl);
 
@@ -153,10 +153,20 @@
               margin: 0;
             `;
             messageDiv.innerHTML = `
-              <div style="margin: 0; padding: 0;">
-                ${window.marked ? marked.parse(data.message) : data.message}
-              </div>
-            `;
+                <div style="margin: 0; padding: 0; max-width: 100%;">
+                  ${window.marked ? marked.parse(data.message) : data.message}
+                </div>
+              `;
+
+              // Constrain all images inside this messageDiv after rendering
+              const imgs = messageDiv.querySelectorAll('img');
+              imgs.forEach(img => {
+                img.style.maxWidth = '120px';   // thumbnail size
+                img.style.height = 'auto';
+                img.style.borderRadius = '8px';
+                img.style.marginTop = '8px';
+              });
+
             messages.appendChild(messageDiv);
             messages.scrollTop = messages.scrollHeight;
 

@@ -1,7 +1,19 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import { Pinecone } from '@pinecone-database/pinecone';
+import { ObjectId } from 'mongodb';
+import { MongoClient } from 'mongodb';
 
 dotenv.config();
+interface SearchParams {
+  search_query: string;
+  store_id: string;
+  filters: {
+    category: string;
+    price_range: { min: number; max: number };
+    availability: 'in_stock' | 'out_of_stock';
+  };
+}
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -20,6 +32,60 @@ const threadMap = new Map<string, OpenAI.Beta.Threads.Thread>();
 
 function isTextContent(content: OpenAI.Beta.Threads.Messages.MessageContent): content is OpenAI.Beta.Threads.Messages.TextContentBlock {
   return content.type === 'text';
+}
+
+async function getEmbedding(text: string): Promise<number[]> {
+  const response = await openai.embeddings.create({
+    model: 'text-embedding-3-small',
+    input: text
+  });
+  return response.data[0].embedding;
+}
+
+export async function vectorProductSearch(searchParams: SearchParams & { store_id: string }) {
+  const { search_query, filters, store_id } = searchParams;
+
+  const embedding = await getEmbedding(search_query);
+
+  const pinecone = new Pinecone({
+    apiKey: process.env.PINECONE_API_KEY!
+  });
+
+  const index = pinecone.Index(process.env.PINECONE_INDEX!);
+
+  // Minimal Pinecone filter for speed — just store_id
+  const pineconeFilter: Record<string, any> = {
+    store_id
+  }
+
+  const vectorResults = await index.query({
+    vector: embedding,
+    topK: 10,
+    includeMetadata: true,
+    filter: pineconeFilter
+  });
+  console.log('Vector results:', vectorResults);
+  // Step 1: Extract Shopify product ID from the 'gid://shopify/Product/123456' format
+  const pineconeIds = vectorResults.matches
+  .map(match => match.id)
+  .filter((id): id is string => typeof id === 'string');
+
+  console.log('Pinecone GIDs:', pineconeIds);
+
+//  const mongoIds = vectorResults.matches
+//    .map(match => match.metadata?.mongo_id)
+//    .filter((id): id is string => Boolean(id));
+//  console.log('Mongo IDs:', mongoIds);
+
+  // Step 2: Fetch products from MongoDB using the Shopify IDs
+  const db = await MongoClient.connect(process.env.MONGODB_URI!);
+  const products = await db.db().collection('Shopify_Products')
+  .find({ admin_graphql_api_id: { $in: pineconeIds } })
+  .toArray();
+
+  console.log('Products:', products);
+
+  return { results: products };
 }
 
 export async function processUserMessage(threadId: string, content: string): Promise<string> {
@@ -89,31 +155,20 @@ export class OpenAIService {
 
       // Construct search parameters
       const searchParams = {
-        search_term: args.search_term || args.product_type,
-        color: args.color || 'any',
-        size: args.size || 'standard',
-        material: args.material || 'any',
-        price_range: args.price_range || { min: 0, max: 1000 }
+        search_query: args.search_term || args.product_type,
+        store_id: "jcsfashions",
+        filters: {
+          category: args.product_type,
+          price_range: args.price_range || { min: 0, max: 1000 },
+          availability: 'in_stock' as 'in_stock' | 'out_of_stock'
+        }
       };
 
       console.log('Search params:', searchParams);
 
       // Make request to our products API endpoint
-      const response = await fetch('http://localhost:3000/api/products/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(searchParams)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Product search API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('Product search response:', data);
-
+      const data = await vectorProductSearch(searchParams);
+      console.log('Product search response from  now:', data);
       // Log each product's image URL for debugging
       data.results.forEach((product: any) => {
         console.log(`Product ${product.name} image URL:`, product.image);
@@ -138,12 +193,22 @@ export class OpenAIService {
         try {
           const args = JSON.parse(toolCall.function.arguments);
           console.log('Parsed arguments:', args);
-          if (!args.product_type || typeof args.product_type !== 'string') {
-            throw new Error('Missing or invalid product_type');
+      
+          const productType = args.product_type || (args.filters?.category ?? null);
+      
+          if (!productType || typeof productType !== 'string') {
+            console.warn('No product_type provided — using fallback or skipping category filter');
           }
-        
-          
-          const result = await this.handleProductSearch(args);
+      
+          const result = await this.handleProductSearch({
+            product_type: productType || 'general', // fallback if needed
+            search_term: args.search_query,
+            color: args.color,
+            size: args.size,
+            material: args.material,
+            price_range: args.filters?.price_range || { min: 0, max: 1000 }
+          });
+      
           toolOutputs.push({
             tool_call_id: toolCall.id,
             output: JSON.stringify(result)
@@ -160,6 +225,7 @@ export class OpenAIService {
         }
       }
     }
+    
 
     if (toolOutputs.length > 0) {
       await this.client.beta.threads.runs.submitToolOutputs(threadId, runId, {
