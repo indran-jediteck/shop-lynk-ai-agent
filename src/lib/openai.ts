@@ -224,6 +224,15 @@ export class OpenAIService {
           });
         }
       }
+      if (toolCall.function.name === 'get_order_status') {
+        const args = JSON.parse(toolCall.function.arguments);
+        const result = await this.handleOrderStatus(args);
+      
+        toolOutputs.push({
+          tool_call_id: toolCall.id,
+          output: JSON.stringify(result)
+        });
+      }
     }
     
 
@@ -367,4 +376,68 @@ export class OpenAIService {
 
     return thread.id;
   }
-} 
+
+  private async handleOrderStatus(args: { order_id: string}) {
+    const { order_id } = args;
+    const shopifyDomain = process.env.cust_store_name;
+    const accessToken = process.env.cust_access_token;
+    console.log('Shopify domain:', shopifyDomain);
+    console.log('Access token:', accessToken);
+    console.log('Order number:', order_id);
+    const store_id = 'jcsfashions';
+ 
+    if (!shopifyDomain || !accessToken) {
+      throw new Error("Missing Shopify credentials.");
+    }
+  
+    try {
+      // Encode '#' if order_number includes it (e.g., '#1001')
+      const encodedOrderNumber = encodeURIComponent(order_id);
+  
+      const searchUrl = `https://${shopifyDomain}/admin/api/2023-10/orders.json?name=${encodedOrderNumber}&status=any&limit=1`;
+      const searchRes = await fetch(searchUrl, {
+        headers: {
+          'X-Shopify-Access-Token': accessToken!,
+          'Content-Type': 'application/json',
+        },
+      });
+  
+      if (!searchRes.ok) {
+        throw new Error(`Order lookup failed: ${searchRes.statusText}`);
+      }
+  
+      const { orders } = await searchRes.json();
+  
+      if (!orders || orders.length === 0) {
+        throw new Error(`Order ${order_id} not found.`);
+      }
+  
+      const orderId = orders[0].id;
+  
+      const orderUrl = `https://${shopifyDomain}/admin/api/2023-10/orders/${orderId}.json`;
+      const orderRes = await fetch(orderUrl, {
+        headers: {
+          'X-Shopify-Access-Token': accessToken!,
+          'Content-Type': 'application/json',
+        },
+      });
+  
+      if (!orderRes.ok) {
+        throw new Error(`Order fetch failed: ${orderRes.statusText}`);
+      }
+  
+      const { order } = await orderRes.json();
+  
+      return {
+        order_id: order.id,
+        name: order.name,
+        financial_status: order.financial_status,
+        fulfillment_status: order.fulfillment_status,
+        cancelled_at: order.cancelled_at,
+      };
+    } catch (err) {
+      console.error('Order status fetch failed:', err);
+      throw err;
+    }
+  }
+}

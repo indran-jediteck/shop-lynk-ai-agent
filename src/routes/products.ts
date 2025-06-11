@@ -315,6 +315,93 @@ router.post('/test-search-vector', async (req, res) => {
   }
 });
 
+//add tool to assistant 
+router.post('/add-tool-to-assistant', async (req, res) => {
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const assistantId = process.env.OPENAI_ASSISTANT_ID;
 
+    if (!assistantId) {
+      return res.status(400).json({ error: 'OPENAI_ASSISTANT_ID is not set' });
+    }
+
+    const getOrderStatusFunction = {
+      type: "function" as const,
+      function: {
+        name: "get_order_status",
+        description: "Fetch the order status using the order ID and store ID",
+        parameters: {
+          type: "object",
+          properties: {
+            order_id: {
+              type: "string",
+              description: "Shopify Order ID"
+            },
+            store_id: {
+              type: "string",
+              description: "Store ID (e.g., jcsfashions)"
+            }
+          },
+          required: ["order_id", "store_id"]
+        }
+      }
+    };
+
+     // Define product_search tool (only requires search query)
+     const productSearchFunction = {
+      type: "function" as const,
+      function: {
+        name: "product_search",
+        description: "Search for products semantically by query",
+        parameters: {
+          type: "object",
+          properties: {
+            search_query: {
+              type: "string",
+              description: "The search query string"
+            }
+          },
+          required: ["search_query"]
+        }
+      }
+    };
+
+    // Fetch current tools to avoid overwriting
+    const assistant = await openai.beta.assistants.retrieve(assistantId);
+    const existingFunctions = assistant.tools
+      .filter(t => t.type === 'function')
+      .map(t => t.function?.name);
+
+    const newTools = [];
+
+    if (!existingFunctions.includes("get_order_status")) {
+      newTools.push(getOrderStatusFunction);
+    }
+
+    if (!existingFunctions.includes("product_search")) {
+      newTools.push(productSearchFunction);
+    }
+
+    // Merge with existing tools
+    const updated = await openai.beta.assistants.update(assistantId, {
+      tools: [
+        ...assistant.tools,
+        ...newTools
+      ]
+    });
+
+    return res.json({
+      message: 'Tool added to assistant',
+      updated_tools: updated.tools
+    });
+
+  } catch (error) {
+    console.error('Error adding tool to assistant:', error);
+    return res.status(500).json({
+      error: 'Failed to add tool to assistant',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
 
 export default router; 
