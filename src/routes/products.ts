@@ -329,20 +329,16 @@ router.post('/add-tool-to-assistant', async (req, res) => {
       type: "function" as const,
       function: {
         name: "get_order_status",
-        description: "Fetch the order status using the order ID and store ID",
+        description: "Fetch the order status using the Shopify order ID",
         parameters: {
           type: "object",
           properties: {
             order_id: {
               type: "string",
-              description: "Shopify Order ID"
-            },
-            store_id: {
-              type: "string",
-              description: "Store ID (e.g., jcsfashions)"
+              description: "Shopify Order ID (e.g., '#1234' or '1234')"
             }
           },
-          required: ["order_id", "store_id"]
+          required: ["order_id"]
         }
       }
     };

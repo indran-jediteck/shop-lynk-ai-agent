@@ -123,6 +123,7 @@ async function getChatResponseQuestions(Summary: string, numberOfQuestions: numb
         },
         ],
     });
+    console.log("getchatresponsesummary: ", response.choices[0].message.content);
     return response.choices[0].message.content;
 };
 
@@ -199,13 +200,46 @@ router.post('/cleanup', async (req, res) => {
 
 // Create agent endpoint
 router.post('/create', async (req, res) => {
-    const { url } = req.body;
-    console.log('starting to create agent for', url);
-    //extract the domain from the url
-    const domain = new URL(url).hostname;
+    const { url, shop_id } = req.body;
+    console.log('starting create agent for url: ', url, 'and shop_id: ', shop_id);
+    console.log('--------------------------------');
+    // Validate input - require either url or shop_id
+    if (!url && !shop_id) {
+      return res.status(400).json({ message: 'Either URL or shop_id is required' });
+    }
+    
+    let finalUrl = url;
+    let storeInfo = null;
+    
+    // If shop_id is provided, look up the URL from MongoDB
+    if (shop_id && !url) {
+      const mongoUri = process.env.MONGODB_URI;
+      if (!mongoUri) {
+        throw new Error("MONGO_URI is not set");
+      }
+      const client = new MongoClient(mongoUri);
+      await client.connect();
+      const db = client.db();
+      
+      // Look up store configuration
+      const store = await db.collection('ShopifyStore').findOne({ store_id: shop_id });
+      if (!store) {
+        return res.status(404).json({ message: `Store with shop_id '${shop_id}' not found` });
+      }
+      
+      // mongo collection has shop_id and shopify_domain
+      finalUrl = `https://${store.shopify_domain}`;
+      storeInfo = store;
+      await client.close();
+    }
+    
+    console.log('starting to create agent for', finalUrl);
+    
+    // Extract domain from the URL
+    const domain = new URL(finalUrl).hostname;
     const baseDomain = domain.split('.').slice(-2, -1)[0]; // gets second-to-last part
    // console.log(baseDomain); 
-    if (url && isValidUrl(url)) {
+    if (finalUrl && isValidUrl(finalUrl)) {
       //search for the url in the mongo db
       const mongoUri = process.env.MONGODB_URI;
       if (!mongoUri) {
@@ -215,33 +249,36 @@ router.post('/create', async (req, res) => {
       await client.connect();
       const db = client.db();
       const collection = db.collection('scraped_sites');
-      const result = await collection.findOne({ url: url });
-      //console.log(result);
+      const result = await collection.findOne({ url: finalUrl });
+      console.log('mongodb result: ', result);
       let homepage = '';
       let content = '';
       let summary = '';
       let questions = '';
       //fetch the homepage
       if(!result){
-        homepage = await fetchHomepage(url);
+        homepage = await fetchHomepage(finalUrl);
         const summaryResult = await getChatResponseSummary(homepage);
+        console.log('summaryResult: ', summaryResult);
         if (!summaryResult) {
             throw new Error('Failed to get summary');
         }
         summary = summaryResult;
-        let numberOfQuestions = 25;
+        let numberOfQuestions = 10;
         const questionsResult = await getChatResponseQuestions(summary,numberOfQuestions);
         questions = questionsResult || '';
-        //console.log(questions);
-        content = await crawlAndStore(url);
+        console.log('questions: ', questions);
+        content = await crawlAndStore(finalUrl);
         await collection.updateOne(
-          { url },
+          { url: finalUrl },
           {
           $set: {
               summary,
               questions,
               content,
               crawledAt: new Date(),
+              shop_id: shop_id || null,
+              store_info: storeInfo
           },
           },
           { upsert: true }
@@ -284,58 +321,91 @@ router.post('/create', async (req, res) => {
       const threadId = thread.id;
       const assistantId = assistant.id;
       let transcript = '';
+
       //print the question number and question
-      console.log(parsedQuestions);
+      console.log('parsedQuestions: ', parsedQuestions);
       let questionNumber = 1;     
 
-      for (const question of parsedQuestions) {
-        console.log(`${questionNumber}. ${question}`);
-        questionNumber++;
-        await Openai.beta.threads.messages.create(threadId, {
-            role: 'user',
-            content: question,
+      await Openai.beta.threads.messages.create(threadId, {
+          role: 'user',
+          content: parsedQuestions.map(question => ({ type: 'text', text: question })),
         });
+      console.log('threadId: ', threadId);
+      const run = await Openai.beta.threads.runs.create(threadId, {
+        assistant_id: assistantId,
+      });
+
+      console.log(`Run started for question: "${parsedQuestions}" => Run ID: ${run.id}`);
+
+      let status = run.status;
+      let runResult = run;
+      while (status !== 'completed' && status !== 'failed' && status !== 'cancelled') {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          runResult = await Openai.beta.threads.runs.retrieve(threadId, run.id);
+          status = runResult.status;
+          console.log(status);
+      }
+          // 4. Get assistant's reply
+      const messages = await Openai.beta.threads.messages.list(threadId);
+      const last = messages.data.find((m) => m.role === 'assistant');
+      const messageContent = last?.content[0];
+      const response = messageContent && 'text' in messageContent ? messageContent.text.value : 'No response';
+      console.log(`💬 Assistant: ${response}`);
+      transcript += `Q: ${parsedQuestions[0]}\nA: ${response}\n\n`;
+      console.log(transcript);
+      console.log("--------------------------------");
+      // for (const question of parsedQuestions) {
+      //   console.log(`${questionNumber}. ${question}`);
+      //   questionNumber++;
+      //   await Openai.beta.threads.messages.create(threadId, {
+      //       role: 'user',
+      //       content: question,
+      //   });
       
-        // 2. Start assistant run
-        const run = await Openai.beta.threads.runs.create(threadId, {
-            assistant_id: assistantId,
-        });
+      //   // 2. Start assistant run
+      //   const run = await Openai.beta.threads.runs.create(threadId, {
+      //       assistant_id: assistantId,
+      //   });
           
-        //console.log(`Run started for question: "${question}" => Run ID: ${run.id}`);
+      //   //console.log(`Run started for question: "${question}" => Run ID: ${run.id}`);
         
-        // 3. Poll for completion
-        let status = run.status;
-        let runResult = run;
-        while (status !== 'completed' && status !== 'failed' && status !== 'cancelled') {
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-            runResult = await Openai.beta.threads.runs.retrieve(threadId, run.id);
-            status = runResult.status;
-            console.log(status);
-        }
-          
-        // 4. Get assistant's reply
-        const messages = await Openai.beta.threads.messages.list(threadId);
-        const last = messages.data.find((m) => m.role === 'assistant');
-        const content = last?.content[0];
-        const response = content && 'text' in content ? content.text.value : 'No response';
-        console.log(`💬 Assistant: ${response}`);
-        transcript += `Q: ${question}\nA: ${response}\n\n`;
-        }
+      //   // 3. Poll for completion
+      //   let status = run.status;
+      //   let runResult = run;
+      //   while (status !== 'completed' && status !== 'failed' && status !== 'cancelled') {
+      //       await new Promise((resolve) => setTimeout(resolve, 1500));
+      //       runResult = await Openai.beta.threads.runs.retrieve(threadId, run.id);
+      //       status = runResult.status;
+      //       console.log(status);
+      //   }
+
+      //   // 4. Get assistant's reply
+      //   const messages = await Openai.beta.threads.messages.list(threadId);
+      //   const last = messages.data.find((m) => m.role === 'assistant');
+      //   const content = last?.content[0];
+      //   const response = content && 'text' in content ? content.text.value : 'No response';
+      //   console.log(`💬 Assistant: ${response}`);
+      //   transcript += `Q: ${question}\nA: ${response}\n\n`;
+      //   }
 
         await collection.updateOne(
-            { url }, // or another selector
+            { url: finalUrl },
             { $set: { Q_A: transcript,
                       assistantId: assistantId,
                       fileId: file.id,
                       vectorStoreId: vectorStore.id,
                       crawledAt: new Date(),
+                      shop_id: shop_id || null,
+                      store_info: storeInfo
                     } 
             },
             { upsert: true }
           );
 
         res.json({  
-          message: `Hi, found URL: ${url}`,
+          message: `Agent created for ${finalUrl}`,
+          shop_id: shop_id || null,
+          url: finalUrl
         });
     } else {
       res.json({ message: 'Invalid URL or no URL provided' });
@@ -418,10 +488,8 @@ async function formatQAPlainText(rawText: string): Promise<{ paragraphs: Paragra
   
       paragraphs.push(new Paragraph({ spacing: { after: 300 } }));
     }
-  
     return { paragraphs };
   }
-
 
 router.post('/createdoc', async (req, res) => {
     const { url } = req.body;
@@ -633,5 +701,97 @@ router.post('/cleanup/assistants/from-mongo-devenv', async (req, res) => {
     res.status(500).json({ error: 'Cleanup failed', details: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
+
+router.post('/test_create_assistant', async (req, res) => {
+  const { shop_id } = req.body;
+  const { url } = req.body;
+  let finalUrl = url;
+  let storeInfo = null;
+
+  if (!url && !shop_id) {
+    return res.status(400).json({ message: 'URL or shop_id is required' });
+  }
+
+  // If shop_id is provided, look up the URL from MongoDB
+  if (shop_id && !url) {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) {
+      throw new Error("MONGO_URI is not set");
+    }
+    const client = new MongoClient(mongoUri);
+    await client.connect();
+    const db = client.db();
+    
+    // Look up store configuration
+    const store = await db.collection('ShopifyStore').findOne({ store_id: shop_id });
+    if (!store) {
+      return res.status(404).json({ message: `Store with shop_id '${shop_id}' not found` });
+    }
+    
+    // mongo collection has shop_id and shopify_domain
+    finalUrl = `https://${store.shopify_domain}`;
+    storeInfo = store;
+    await client.close();
+  }
+
+  console.log('starting to create agent for', finalUrl);
+  let homepage = await fetchHomepage(finalUrl);
+  const summaryResult = await getChatResponseSummary(homepage);
+  console.log('summaryResult: ', summaryResult);
+  const questionsResult = await getChatResponseQuestions(summaryResult || '');
+  console.log('questionsResult: ', questionsResult);
+  const systemPromptResult = await getSystemPrompt(summaryResult || '');
+  console.log('systemPromptResult: ', systemPromptResult);
+  const parsedQuestions = await parseQuestions(questionsResult || '');
+  console.log('parsedQuestions: ', parsedQuestions);
+  let content = await crawlonly(finalUrl);
+  console.log('content: ', content);
+  //write content to a file
+  fs.writeFileSync('content.txt', content);
+  console.log('content written to file');
+  return res.json({ message: 'test_create_assistant', url: finalUrl });
+});
+
+
+export const crawlonly = async (startUrl: string) => {
+  const visited = new Set<string>();
+  const MAX_PAGES = 100;
+
+  const baseUrl = new URL(startUrl).origin;
+  let fullText = '';
+
+  const crawl = async (url: string) => {
+    //console.log("Crawling: ", url, "Visited: ", visited.size);
+    if (visited.size >= MAX_PAGES || visited.has(url)) return;
+    visited.add(url);
+
+    try {
+      const res = await axios.get(url);
+      const $ = cheerio.load(res.data);
+      const text = $('body').text().replace(/\s+/g, ' ').trim();
+      fullText += `\n\n--- Page: ${url} ---\n${text}`;
+
+      const links = $('a[href]')
+        .map((_, el) => $(el).attr('href'))
+        .get()
+        .filter(href => href && (href.startsWith('/') || href.startsWith(baseUrl)))
+        .map(href => (href.startsWith('http') ? href : `${baseUrl}${href}`));
+
+      for (const link of links) {
+        await crawl(link);
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error(`Failed to fetch ${url}:`, err.message);
+      } else {
+        console.error(`Failed to fetch ${url}: Unknown error`, err);
+      }
+    }
+  };
+
+  await crawl(startUrl);
+  return fullText.trim();
+};
+
 
 export default router;

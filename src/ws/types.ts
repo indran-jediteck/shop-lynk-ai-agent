@@ -14,6 +14,7 @@ export interface UserMessage {
   type: 'user_message';
   message: string;
   threadId?: string;
+  store_id?: string;  // Add store_id for store-specific assistants
   userInfo?: {
     name: string;
     email: string;

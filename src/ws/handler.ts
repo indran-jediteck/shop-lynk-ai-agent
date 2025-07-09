@@ -160,8 +160,18 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
       message: 'Typing'
     }));
 
+    // Ensure we have store_id
+    if (!message.store_id) {
+      ws.send(JSON.stringify({
+        type: 'system_message',
+        threadId: threadId,
+        message: 'Store ID is required for this operation'
+      }));
+      return;
+    }
+
     // Process the message
-    const response = await processUserMessage(threadId, message.message);
+    const response = await processUserMessage(threadId, message.message, message.store_id);
     console.log('OpenAI response received:', {
       threadId,
       responseLength: response.length

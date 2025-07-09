@@ -27,7 +27,9 @@
       browserId = 'browser-' + crypto.randomUUID();
       localStorage.setItem('lynk_browser_id', browserId);
     }
-
+    const script = document.querySelector('script[src*="lynk-ai.js"]');
+    const storeId = script?.dataset?.storeId || window.location.hostname;
+    console.log("🛒 Store ID:", storeId);
     let userInfo = JSON.parse(localStorage.getItem('lynk_chat_user') || '{}');
     let ws; 
     const allowedMessages = ['Typing', 'Hold on, still working on your last request', 'Fetching data', 'Processing', 'Working on it'];    
@@ -74,9 +76,9 @@
 
     function connectWebSocket() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      //const wsUrl = `${protocol}//${window.location.host}`;
+      const wsUrl = `${protocol}//${window.location.host}`;
       //const wsUrl = `wss://5569-2601-647-5500-6530-b50e-d9de-bd9e-48fc.ngrok-free.app`;
-      const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
+      //const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
       ws = new WebSocket(wsUrl);
       console.log('Connecting to WebSocket:', wsUrl);
 
@@ -87,6 +89,7 @@
           browserId: browserId,
           userInfo: userInfo,
           threadId: threadId,
+          storeId: storeId
         }));
       };
 
@@ -435,6 +438,7 @@
           type: 'user_message',
           message: message,
           threadId: threadId,
+          store_id: storeId, // Add store_id from global variable
           userInfo: userInfo
         }));
       }

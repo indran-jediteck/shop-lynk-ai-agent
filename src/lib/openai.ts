@@ -19,13 +19,14 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
+// Remove or comment out the global ASSISTANT_ID usage
+// const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
 
-if (!ASSISTANT_ID) {
-  throw new Error('OPENAI_ASSISTANT_ID environment variable is not set');
-}else{
-  console.log('ASSISTANT_ID:', ASSISTANT_ID);
-}
+// if (!ASSISTANT_ID) {
+//   throw new Error('OPENAI_ASSISTANT_ID environment variable is not set');
+// }else{
+//   console.log('ASSISTANT_ID:', ASSISTANT_ID);
+// }
 
 // Map to store thread IDs
 const threadMap = new Map<string, OpenAI.Beta.Threads.Thread>();
@@ -88,21 +89,16 @@ export async function vectorProductSearch(searchParams: SearchParams & { store_i
   return { results: products };
 }
 
-export async function processUserMessage(threadId: string, content: string): Promise<string> {
+let openaiServiceInstance: OpenAIService | null = null;
+
+export async function processUserMessage(threadId: string, content: string, store_id?: string): Promise<string> {
   try {
-    console.log('Processing user message:', content);
-    console.log('Thread ID:', threadId);
-    console.log('ASSISTANT_ID:', ASSISTANT_ID);
-    const openaiService = new OpenAIService();
-    const openaiThreadId = threadId;
-    const response = await openaiService.sendMessage(openaiThreadId, content);
-    
-    // If the response is our "hold on" message, return it directly
-    if (response === "Hold on, still working on your last request...") {
-      return response;
+    // Reuse the same instance
+    if (!openaiServiceInstance) {
+      openaiServiceInstance = new OpenAIService();
     }
     
-    console.log('OpenAI response:', response);
+    const response = await openaiServiceInstance.sendMessage(threadId, content, store_id);
     return response;
   } catch (error) {
     console.error('Error processing message:', error);
@@ -115,21 +111,23 @@ export async function processUserMessage(threadId: string, content: string): Pro
 
 export class OpenAIService {
   private client: OpenAI;
-  private assistantId: string;
+  private assistantId?: string; // Make optional
   private threads: Map<string, string>;
+  private assistantCache: Map<string, string> = new Map(); // Add cache
 
   constructor() {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY environment variable is not set');
     }
-    if (!process.env.OPENAI_ASSISTANT_ID) {
-      throw new Error('OPENAI_ASSISTANT_ID environment variable is not set');
-    }
+    // Remove the requirement for OPENAI_ASSISTANT_ID
+    // if (!process.env.OPENAI_ASSISTANT_ID) {
+    //   throw new Error('OPENAI_ASSISTANT_ID environment variable is not set');
+    // }
 
     this.client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
-    this.assistantId = process.env.OPENAI_ASSISTANT_ID;
+    this.assistantId = process.env.OPENAI_ASSISTANT_ID; // Optional fallback
     this.threads = new Map();
   }
 
@@ -181,6 +179,37 @@ export class OpenAIService {
     }
   }
 
+  private async handleVectorSearch(args: {
+    search_query: string;
+    store_id: string;
+    filters?: {
+      category: string;  // Required in interface
+      price_range: { min: number; max: number };  // Required in interface
+      availability: 'in_stock' | 'out_of_stock';  // Required in interface
+    };
+  }): Promise<any> {
+    console.log('Performing vector search with args:', args);
+    
+    try {
+      const searchParams = {
+        search_query: args.search_query,
+        store_id: args.store_id,
+        filters: args.filters || {
+          category: 'general',
+          price_range: { min: 0, max: 1000 },
+          availability: 'in_stock'
+        }
+      };
+
+      console.log('Vector search params:', searchParams);
+      const data = await vectorProductSearch(searchParams);
+      return data;
+    } catch (error) {
+      console.error('Error in vector search:', error);
+      throw error;
+    }
+  }
+
   private async handleToolCalls(threadId: string, runId: string, toolCalls: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[]): Promise<void> {
     const toolOutputs = [];
 
@@ -224,9 +253,38 @@ export class OpenAIService {
           });
         }
       }
+      if (toolCall.function.name === 'vector_search') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          console.log('Vector search arguments:', args);
+          
+          const result = await this.handleVectorSearch({
+            search_query: args.search_query,
+            store_id: args.store_id,
+            filters: args.filters
+          });
+          
+          toolOutputs.push({
+            tool_call_id: toolCall.id,
+            output: JSON.stringify(result)
+          });
+        } catch (error) {
+          console.error('Error processing vector search:', error);
+          toolOutputs.push({
+            tool_call_id: toolCall.id,
+            output: JSON.stringify({ 
+              error: 'Failed to process vector search',
+              details: error instanceof Error ? error.message : 'Unknown error'
+            })
+          });
+        }
+      }
       if (toolCall.function.name === 'get_order_status') {
         const args = JSON.parse(toolCall.function.arguments);
-        const result = await this.handleOrderStatus(args);
+        const result = await this.handleOrderStatus({ 
+          order_id: args.order_id, 
+          store_id: args.store_id 
+        });
       
         toolOutputs.push({
           tool_call_id: toolCall.id,
@@ -248,8 +306,18 @@ export class OpenAIService {
     return thread.id;
   }
 
-  public async sendMessage(threadId: string, message: string): Promise<string> {
+  public async sendMessage(
+    threadId: string, 
+    message: string, 
+    store_id?: string,
+    assistantId?: string // Add this parameter
+  ): Promise<string> {
     try {
+      // Validate that we have either store_id or fallback assistant
+      if (!store_id && !this.assistantId) {
+        throw new Error('Either store_id or OPENAI_ASSISTANT_ID environment variable is required');
+      }
+
       // Step 1: Check for any active run
       const runs = await this.client.beta.threads.runs.list(threadId);
       const activeRun = runs.data.find(run => 
@@ -280,8 +348,12 @@ export class OpenAIService {
       }
   
       // Step 3: Create and run
+      const finalAssistantId = assistantId || (store_id ? 
+        await this.getStoreAssistant(store_id) : 
+        this.assistantId!); // Use fallback assistant
+        
       const run = await this.client.beta.threads.runs.create(threadId, {
-        assistant_id: this.assistantId,
+        assistant_id: finalAssistantId,
       });
   
       // Step 4: Wait for completion (same as before)
@@ -377,14 +449,69 @@ export class OpenAIService {
     return thread.id;
   }
 
-  private async handleOrderStatus(args: { order_id: string}) {
-    const { order_id } = args;
-    const shopifyDomain = process.env.cust_store_name;
-    const accessToken = process.env.cust_access_token;
+  // Cache assistant_id per store
+  private async getStoreAssistant(store_id: string): Promise<string> {
+    // Check cache first
+    if (this.assistantCache.has(store_id)) {
+      return this.assistantCache.get(store_id)!;
+    }
+
+    // Fetch from MongoDB if not cached
+    const db = await MongoClient.connect(process.env.MONGODB_URI!);
+    const store = await db.db().collection('ShopifyStore').findOne({ store_id });
+    await db.close();
+    
+    if (!store?.agents?.length) {
+      throw new Error(`No agents found for store ${store_id}`);
+    }
+    
+    const lastAgent = store.agents[store.agents.length - 1];
+    const assistantId = lastAgent.openai_assistant_id;
+    
+    if (!assistantId) {
+      throw new Error(`No assistant ID found for store ${store_id}`);
+    }else{
+      console.log('Assistant found for store:', assistantId);
+    }
+    
+    // Cache the result
+    this.assistantCache.set(store_id, assistantId);
+    return assistantId;
+  }
+
+  private async getStoreConfig(store_id: string): Promise<any> {
+    const db = await MongoClient.connect(process.env.MONGODB_URI!);
+    const store = await db.db().collection('ShopifyStore').findOne({ store_id });
+    await db.close();
+    
+    if (!store) {
+      throw new Error(`Store ${store_id} not found`);
+    }
+    
+    return store;
+  }
+
+  private async handleOrderStatus(args: { order_id: string; store_id?: string }) {
+    const { order_id, store_id } = args;
+    
+    // Use store-specific config if store_id provided, otherwise fallback to env vars
+    let shopifyDomain: string;
+    let accessToken: string;
+    
+    if (store_id) {
+      const store = await this.getStoreConfig(store_id);
+      shopifyDomain = store.shopify_domain;
+      accessToken = store.access_token;
+    } else {
+      // Fallback to environment variables for backward compatibility
+      shopifyDomain = process.env.cust_store_name!;
+      accessToken = process.env.cust_access_token!;
+    }
+    
     console.log('Shopify domain:', shopifyDomain);
     console.log('Access token:', accessToken);
     console.log('Order number:', order_id);
-    const store_id = 'jcsfashions';
+    console.log('Store ID:', store_id || 'default');
  
     if (!shopifyDomain || !accessToken) {
       throw new Error("Missing Shopify credentials.");
