@@ -14,7 +14,7 @@ const client = new Client({
 });
 
 const TOKEN = process.env.DISCORD_BOT_TOKEN!;
-const API_URL = process.env.CHAT_INJECT_API || 'http://localhost:3000/api/inject';
+const API_URL = process.env.CHAT_INJECT_API || 'http://localhost:4000/api/inject';
 
 // TEMP: Hardcoded browser ID for now
 //const DEFAULT_BROWSER_ID = process.env.BROWSERID || 'browser-7483984b-dd38-47a3-bf04-a0a3ebd2e573'; // Replace this with an active browserId for testing

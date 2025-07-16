@@ -91,14 +91,14 @@ export async function vectorProductSearch(searchParams: SearchParams & { store_i
 
 let openaiServiceInstance: OpenAIService | null = null;
 
-export async function processUserMessage(threadId: string, content: string, store_id?: string): Promise<string> {
+export async function processUserMessage(threadId: string, content: string, assistantId: string): Promise<string> {
   try {
     // Reuse the same instance
     if (!openaiServiceInstance) {
       openaiServiceInstance = new OpenAIService();
     }
     
-    const response = await openaiServiceInstance.sendMessage(threadId, content, store_id);
+    const response = await openaiServiceInstance.sendMessage(threadId, content, assistantId);
     return response;
   } catch (error) {
     console.error('Error processing message:', error);
@@ -127,7 +127,7 @@ export class OpenAIService {
     this.client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
-    this.assistantId = process.env.OPENAI_ASSISTANT_ID; // Optional fallback
+    // this.assistantId = process.env.OPENAI_ASSISTANT_ID; // Optional fallback
     this.threads = new Map();
   }
 
@@ -309,14 +309,13 @@ export class OpenAIService {
   public async sendMessage(
     threadId: string, 
     message: string, 
-    store_id?: string,
-    assistantId?: string // Add this parameter
+    assistantId: string // Add this parameter
   ): Promise<string> {
     try {
       // Validate that we have either store_id or fallback assistant
-      if (!store_id && !this.assistantId) {
-        throw new Error('Either store_id or OPENAI_ASSISTANT_ID environment variable is required');
-      }
+      // if (!store_id && !this.assistantId) {
+      //   throw new Error('Either store_id or OPENAI_ASSISTANT_ID environment variable is required');
+      // }
 
       // Step 1: Check for any active run
       const runs = await this.client.beta.threads.runs.list(threadId);
@@ -348,9 +347,10 @@ export class OpenAIService {
       }
   
       // Step 3: Create and run
-      const finalAssistantId = assistantId || (store_id ? 
-        await this.getStoreAssistant(store_id) : 
-        this.assistantId!); // Use fallback assistant
+      const finalAssistantId = assistantId 
+      // || (store_id ? 
+        // await this.getStoreAssistant(store_id) : 
+        // this.assistantId!); // Use fallback assistant
         
       const run = await this.client.beta.threads.runs.create(threadId, {
         assistant_id: finalAssistantId,

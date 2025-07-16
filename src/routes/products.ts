@@ -132,9 +132,9 @@ router.post('/initiate-store-products', async (req, res) => {
 
     while (hasNextPage) {
       const baseUrl = `https://${shopifyDomain}/admin/api/2023-10/products.json`;
-      const url = pageInfo
-        ? `${baseUrl}?limit=250&page_info=${encodeURIComponent(pageInfo)}`
-        : `${baseUrl}?limit=250&status=active`;
+      const url: string = pageInfo
+  ? `${baseUrl}?limit=250&page_info=${encodeURIComponent(pageInfo)}`
+  : `${baseUrl}?limit=250&status=active`;
     
       console.log(`Requesting: ${url}`);
     

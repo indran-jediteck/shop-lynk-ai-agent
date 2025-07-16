@@ -4,6 +4,8 @@ export interface InitMessage {
   type: 'init';
   browserId: string;
   threadId?: string;
+  assistantDbId: string;
+  assistantId: string;
   userInfo?: {
     name: string;
     email: string;
@@ -14,7 +16,9 @@ export interface UserMessage {
   type: 'user_message';
   message: string;
   threadId?: string;
-  store_id?: string;  // Add store_id for store-specific assistants
+  // store_id?: string;  // Add store_id for store-specific assistants
+  assistantId: string;
+  assistantDbId: string;
   userInfo?: {
     name: string;
     email: string;

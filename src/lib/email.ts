@@ -11,7 +11,7 @@ class EmailService {
     this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+      secure: true, // true for 465, false for other ports
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -28,7 +28,7 @@ class EmailService {
     try {
       console.log('Sending email to:', to , 'with subject:', subject, 'and message:', message, 'and cc:', cc);  
       const mailOptions = {
-        from: `JCS Fashions <${cc}>`,
+        from: `Lynk Support <${cc}>`,
         to,
         replyTo: cc,
         cc,

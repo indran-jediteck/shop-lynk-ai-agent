@@ -4,25 +4,37 @@ import { activeConnections } from './clients';
 import { WebSocketMessage, InitMessage, UserMessage } from './types';
 import { processUserMessage, OpenAIService } from '../lib/openai';
 import dotenv from 'dotenv';
-import { storeBrowserThread } from '../lib/db';
+import { getAssistantById, storeBrowserThread } from '../lib/db';
+import { ObjectId } from 'mongodb';
 
 dotenv.config();
 
-async function sendToDiscord(message: string, sender: string, threadId: string, userInfo?: { name: string; email: string }) {
-  if (!process.env.DISCORD_WEBHOOK_URL) return;
-  
+async function sendToDiscord(message: string, sender: string, threadId: string, userInfo?: { name: string; email: string }, discordWebhookUrl?: string) {
+  console.log('Sending message to Discord:', discordWebhookUrl);
+  if (!discordWebhookUrl) return;
+  const cleanedMessage = message.trim().replace(/^[-–—]\s*/, ''); 
+  console.log('Cleaned message:', cleanedMessage);
+  const finalMessage = `**${sender || "Unknown Sender"}** (Thread: ${threadId || "N/A"})${
+    userInfo ? `\n**User:** ${userInfo.name} (${userInfo.email})` : ""
+  }:\n${cleanedMessage || "(No message provided)"}`;
   // Fire and forget - don't await the Discord webhook
-  fetch(process.env.DISCORD_WEBHOOK_URL, {
+  const response = await fetch(discordWebhookUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      content: `**${sender}** (Thread: ${threadId})${userInfo ? `\n**User:** ${userInfo.name} (${userInfo.email})` : ''}:\n${message}`,
+      embeds: [
+        {
+          title: 'New Message',
+          description: finalMessage,
+        }
+      ]
     }),
   }).catch(error => {
     console.error('Error sending message to Discord:', error);
   });
+  console.log('Response from Discord:', response);
 }
 
 export function setupWebSocket(server: Server) {
@@ -110,30 +122,33 @@ async function handleInit(ws: WebSocket, message: InitMessage) {
     //store in mongo with email, name , browserid and threadid shopify_browser_thread collection  
     await storeBrowserThread(message.userInfo.email, message.userInfo.name, message.browserId, message.threadId);
   }
+  let assistantCollection: any;
+  try{
+    assistantCollection = await getAssistantById(message.assistantDbId);
+    // console.log('Assistant collection:', assistantCollection);
+  }catch(error){
+    console.error('Error getting assistant by id:', error);
+  }
 
   activeConnections.set(message.browserId, ws);
 
-  ws.send(JSON.stringify({
-    type: 'init_ack',
-    browserId: message.browserId,
-    threadId: message.threadId,
-    message: 'Connection established'
-  }));
+  // ws.send(JSON.stringify({
+  //   type: 'init_ack',
+  //   browserId: message.browserId,
+  //   threadId: message.threadId,
+  //   message: 'Connection established'
+  // }));
 
   const firstName = message.userInfo.name.split(' ')[0] || 'there';
   ws.send(JSON.stringify({
-    type: 'new_message',
-    message: `Hi ${firstName}! 👋 I'm your AI assistant. How can I help you today?`,
-    sender: 'ai',
+    type: 'init_message',
+    message: `Hi ${firstName}! 👋 ${assistantCollection?.settings.welcome_message}`,
+    sender: 'bot',
     browserId: message.browserId,
-    followUpActions: [
-      { text: 'Return/Exchange', prompt: 'What is the return policy?' },
-      { text: 'Schedule appointment', prompt: 'Can I schedule an appointment?' },
-      { text: 'Studio hours', prompt: 'What are your studio hours?' },
-      { text: 'Contact support', prompt: 'I need to speak with customer support' },
-      { text: 'Order Status', prompt: 'Can you help me check the status of my order?' },
-      { text: 'Product question', prompt: 'I have a question about a product' }
-    ]
+    threadId: message.threadId,
+    followUpActions: ["What services do you provide?",
+                  "What is your company name?",
+                  "What is your company address?",]
   }))
 
   console.log('Active connections after init:', Array.from(activeConnections.keys()));
@@ -148,10 +163,19 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
   });
 
   const threadId = message.threadId || 'default';
+  let assistantCollection: any;
+  try{
+    assistantCollection = await getAssistantById(message.assistantDbId);
+    // console.log('Assistant collection:', assistantCollection);
+  }catch(error){
+    console.error('Error getting assistant by id:', error);
+  }
+  // console.log('Assistant collection:', assistantCollection);
+  const discordWebhookUrl = assistantCollection.discordWebhookUrl;
 
   try {
     // Send user message to Discord without awaiting
-    sendToDiscord(message.message, 'User', threadId, message.userInfo);
+    sendToDiscord(message.message, 'User', threadId, message.userInfo, discordWebhookUrl);
 
     // Send thinking message
     ws.send(JSON.stringify({
@@ -161,30 +185,30 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
     }));
 
     // Ensure we have store_id
-    if (!message.store_id) {
-      ws.send(JSON.stringify({
-        type: 'system_message',
-        threadId: threadId,
-        message: 'Store ID is required for this operation'
-      }));
-      return;
-    }
+    // if (!message.store_id) {
+    //   ws.send(JSON.stringify({
+    //     type: 'system_message',
+    //     threadId: threadId,
+    //     message: 'Store ID is required for this operation'
+    //   }));
+    //   return;
+    // }
 
     // Process the message
-    const response = await processUserMessage(threadId, message.message, message.store_id);
+    const response = await processUserMessage(threadId, message.message, message.assistantId);
     console.log('OpenAI response received:', {
       threadId,
       responseLength: response.length
     });
 
     // Send assistant response to Discord without awaiting
-    sendToDiscord(response, 'Assistant', threadId, message.userInfo);
+    sendToDiscord(response, 'Assistant', threadId, message.userInfo, discordWebhookUrl);
 
     // Send response to user
     ws.send(JSON.stringify({
       type: 'new_message',
       message: response,
-      sender: 'ai',
+      sender: 'bot',
       threadId: threadId
     }));
   } catch (error) {

@@ -92,14 +92,14 @@ app.post('/api/inject', express.json(), async (req, res) => {
       res.json({ success: true, message: `Delivered to ${email} via WebSocket.`});
     } else {
       //lets send email to this user with a copy to the storeowners email address also 
-      const storeOwnerEmail = process.env.customer_email;
-      await emailService.sendEmail(email, 'JCS Fashions', message, storeOwnerEmail);
+      // const storeOwnerEmail = process.env.customer_email;
+      await emailService.sendEmail(email, 'lynk support', message, "demomihir3@gmail.com");
       res.json({ success: true, message: 'email sent to user. Email sent to store owner' });
     }
 });
 
 // Start server
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 connectToDatabase().then(() => {
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

@@ -38,6 +38,31 @@ const browserThreadSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 });
 
+const assistantSchema = new mongoose.Schema({
+  name: String,
+  description: String,
+  useCase: String,
+  model: String,
+  apiKey: String,
+  userEmail: String,
+  userId: String,
+  organizationId: String,
+  domain: String,
+  assistantId: { type: String, required: true, unique: true },
+  Q_A: String,
+  vectorStoreId: String,
+  fileIds: [String],
+  lastAccessedAt: Date,
+  createdAt: Date,
+  updatedAt: Date,
+  status: String,
+  settings: mongoose.Schema.Types.Mixed,
+  filesContent: mongoose.Schema.Types.Mixed,
+  discordWebhookUrl: String
+}, { timestamps: true });
+
+export const Assistant = mongoose.model('Assistant', assistantSchema);
+
 export const StoreConfig = mongoose.model('StoreConfig', storeConfigSchema);
 export const Message = mongoose.model('Message', messageSchema);
 export const BrowserThread = mongoose.model('BrowserThread', browserThreadSchema);
@@ -51,6 +76,11 @@ export async function connectToDatabase() {
     throw error;
   }
 }
+
+export async function getAssistantById(assistantDbId: string) {
+  return Assistant.findOne({ _id: new mongoose.Types.ObjectId(assistantDbId) });
+}
+
 
 export async function getStoreConfig(shop: string) {
   return StoreConfig.findOne({ shop });
