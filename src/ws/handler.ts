@@ -4,18 +4,24 @@ import { activeConnections } from './clients';
 import { WebSocketMessage, InitMessage, UserMessage } from './types';
 import { processUserMessage, OpenAIService } from '../lib/openai';
 import dotenv from 'dotenv';
-import { getAssistantById, storeBrowserThread } from '../lib/db';
+import { getAssistantById, storeBrowserThread, BrowserThread } from '../lib/db';
 import { ObjectId } from 'mongodb';
 
 dotenv.config();
 
-async function sendToDiscord(message: string, sender: string, threadId: string, userInfo?: { name: string; email: string }, discordWebhookUrl?: string) {
+async function sendToDiscord(
+  message: string, 
+  sender: string, 
+  threadId: string, 
+  userInfo?: { name: string; email: string; phone: string }, // Add phone
+  discordWebhookUrl?: string
+) {
   console.log('Sending message to Discord:', discordWebhookUrl);
   if (!discordWebhookUrl) return;
   const cleanedMessage = message.trim().replace(/^[-–—]\s*/, ''); 
   console.log('Cleaned message:', cleanedMessage);
   const finalMessage = `**${sender || "Unknown Sender"}** (Thread: ${threadId || "N/A"})${
-    userInfo ? `\n**User:** ${userInfo.name} (${userInfo.email})` : ""
+    userInfo ? `\n**User:** ${userInfo.name} (${userInfo.email}) - ${userInfo.phone}` : ""
   }:\n${cleanedMessage || "(No message provided)"}`;
   // Fire and forget - don't await the Discord webhook
   const response = await fetch(discordWebhookUrl, {
@@ -104,8 +110,8 @@ async function handleInit(ws: WebSocket, message: InitMessage) {
     return;
   }
 
-  if (!message.userInfo || !message.userInfo.name || !message.userInfo.email) {
-    console.warn('Init received without complete userInfo. Ignoring.');
+  if (!message.userInfo || !message.userInfo.name || !message.userInfo.email || !message.userInfo.phone) {
+    console.warn('Init received without complete userInfo (name, email, phone required). Ignoring.');
     return;
   }
 
@@ -120,35 +126,64 @@ async function handleInit(ws: WebSocket, message: InitMessage) {
     console.log('ThreadId created:', message.threadId);
     //we need to store this in mongo for api/inject to look it up no?
     //store in mongo with email, name , browserid and threadid shopify_browser_thread collection  
-    await storeBrowserThread(message.userInfo.email, message.userInfo.name, message.browserId, message.threadId);
+    await storeBrowserThread(
+      message.userInfo.email, 
+      message.userInfo.name, 
+      message.userInfo.phone, // Add this
+      message.browserId, 
+      message.threadId
+    );
   }
   let assistantCollection: any;
+  let assistantId: string | undefined; // Allow undefined initially
   try{
-    assistantCollection = await getAssistantById(message.assistantDbId);
-    // console.log('Assistant collection:', assistantCollection);
+    const openaiService = new OpenAIService();
+    assistantId = await openaiService.getStoreAssistant(message.storeId);
+    assistantCollection = await getAssistantById(assistantId);
+    console.log('Assistant ID retrieved:', assistantId); // Add debugging
   }catch(error){
     console.error('Error getting assistant by id:', error);
+    // Handle the error - maybe return early or use a fallback
+    ws.send(JSON.stringify({
+      type: 'system_message',
+      threadId: message.threadId,
+      message: 'Error: Unable to get assistant. Please try again.'
+    }));
+    return;
+  }
+
+  // Add validation before using assistantId
+  if (!assistantId) {
+    console.error('assistantId is undefined');
+    ws.send(JSON.stringify({
+      type: 'system_message',
+      threadId: message.threadId,
+      message: 'Error: No assistant ID available. Please try again.'
+    }));
+    return;
   }
 
   activeConnections.set(message.browserId, ws);
 
-  // ws.send(JSON.stringify({
-  //   type: 'init_ack',
-  //   browserId: message.browserId,
-  //   threadId: message.threadId,
-  //   message: 'Connection established'
-  // }));
+  ws.send(JSON.stringify({
+    type: 'init_ack',
+    browserId: message.browserId,
+    threadId: message.threadId,
+    message: 'Connection established'
+  }));
 
   const firstName = message.userInfo.name.split(' ')[0] || 'there';
   ws.send(JSON.stringify({
     type: 'init_message',
-    message: `Hi ${firstName}! 👋 ${assistantCollection?.settings.welcome_message}`,
+    message: `Hi ${firstName}! 👋 ${assistantCollection?.settings?.welcome_message || "I'm your AI assistant. How can I help you today?"}`,
     sender: 'bot',
     browserId: message.browserId,
     threadId: message.threadId,
-    followUpActions: ["What services do you provide?",
-                  "What is your company name?",
-                  "What is your company address?",]
+    followUpActions: assistantCollection?.settings?.followUpActions || [
+      "Studio Hours?",
+      "Customer Support?",
+      "Product Returns?"
+    ]
   }))
 
   console.log('Active connections after init:', Array.from(activeConnections.keys()));
@@ -162,16 +197,72 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
     messageLength: message.message.length
   });
 
-  const threadId = message.threadId || 'default';
+  let threadId = message.threadId;
+
+  if (!threadId) {
+    // Try to get threadId from database using browserId or email
+    const browserThread = await BrowserThread.findOne({ 
+      $or: [
+        { browserId: message.browserId },
+        { email: message.userInfo?.email }
+      ]
+    });
+    
+    if (browserThread) {
+      threadId = browserThread.threadId;
+      console.log('Retrieved threadId from database:', threadId);
+    } else {
+      // Create new thread if none exists
+      console.log('No threadId found, creating new thread');
+      if (!message.userInfo) {
+        console.error('No userInfo available for creating thread');
+        return;
+      }
+      const openaiService = new OpenAIService();
+      threadId = await openaiService.createThreadWithContext(message.userInfo);
+      
+      // Store the new thread in database
+      await storeBrowserThread(
+        message.userInfo.email,
+        message.userInfo.name,
+        message.userInfo.phone,
+        message.browserId,
+        threadId
+      );
+      console.log('Created and stored new threadId:', threadId);
+    }
+  }
   let assistantCollection: any;
+  let assistantId: string | undefined; // DECLARE OUTSIDE THE TRY BLOCK
   try{
-    assistantCollection = await getAssistantById(message.assistantDbId);
-    // console.log('Assistant collection:', assistantCollection);
+    const openaiService = new OpenAIService();
+    assistantId = await openaiService.getStoreAssistant(message.storeId);
+    assistantCollection = await getAssistantById(assistantId);
+    console.log('Assistant ID retrieved:', assistantId); // Add debugging
   }catch(error){
     console.error('Error getting assistant by id:', error);
+    // Handle the error - maybe return early or use a fallback
+    ws.send(JSON.stringify({
+      type: 'system_message',
+      threadId: threadId,
+      message: 'Error: Unable to get assistant. Please try again.'
+    }));
+    return;
   }
+
+  // Add validation before using assistantId
+  if (!assistantId) {
+    console.error('assistantId is undefined');
+    ws.send(JSON.stringify({
+      type: 'system_message',
+      threadId: threadId,
+      message: 'Error: No assistant ID available. Please try again.'
+    }));
+    return;
+  }
+
   // console.log('Assistant collection:', assistantCollection);
-  const discordWebhookUrl = assistantCollection.discordWebhookUrl;
+  const discordWebhookUrl = assistantCollection?.discordWebhookUrl || process.env.DISCORD_WEBHOOK_URL;
 
   try {
     // Send user message to Discord without awaiting
@@ -195,7 +286,12 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
     // }
 
     // Process the message
-    const response = await processUserMessage(threadId, message.message, message.assistantId);
+    console.log('About to call processUserMessage with:', {
+      threadId,
+      message: message.message,
+      assistantId
+    });
+    const response = await processUserMessage(threadId, message.message, assistantId);
     console.log('OpenAI response received:', {
       threadId,
       responseLength: response.length

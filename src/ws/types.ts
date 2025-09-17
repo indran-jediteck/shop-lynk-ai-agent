@@ -6,9 +6,11 @@ export interface InitMessage {
   threadId?: string;
   assistantDbId: string;
   assistantId: string;
+  storeId: string;  // Add this line
   userInfo?: {
     name: string;
     email: string;
+    phone: string;
   };
 }
 
@@ -16,12 +18,14 @@ export interface UserMessage {
   type: 'user_message';
   message: string;
   threadId?: string;
-  // store_id?: string;  // Add store_id for store-specific assistants
+  storeId: string;
   assistantId: string;
   assistantDbId: string;
+  browserId: string;  // ADD THIS
   userInfo?: {
     name: string;
     email: string;
+    phone: string;
   };
 }
 

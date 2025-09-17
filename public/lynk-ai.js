@@ -83,7 +83,7 @@
       console.log('Connecting to WebSocket:', wsUrl);
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('WebSocket connected now now sending init message');
         ws.send(JSON.stringify({
           type: 'init',
           browserId: browserId,
@@ -115,6 +115,61 @@
               console.log('Thread ID set from server:', threadId);
             }
             break;
+            
+          case 'init_message':
+            // Display the welcome message with follow-up actions
+            const welcomeDiv = document.createElement('div');
+            welcomeDiv.style.cssText = `
+              align-self: flex-start;
+              background: #f0f0f0;
+              color: #333;
+              padding: 10px 15px;
+              border-radius: 15px 15px 15px 0;
+              max-width: 80%;
+              word-wrap: break-word;
+              margin: 0;
+            `;
+            welcomeDiv.innerHTML = `
+              <div style="margin: 0; padding: 0; max-width: 100%;">
+                ${window.marked ? marked.parse(data.message) : data.message}
+              </div>
+            `;
+            messages.appendChild(welcomeDiv);
+            
+            // Add follow-up action buttons
+            if (data.followUpActions && Array.isArray(data.followUpActions)) {
+              const actionsDiv = document.createElement('div');
+              actionsDiv.style.cssText = `
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 10px;
+              `;
+              
+              data.followUpActions.forEach(action => {
+                const actionButton = document.createElement('button');
+                actionButton.textContent = action;
+                actionButton.style.cssText = `
+                  background: #f0f0f0;
+                  border: 1px solid #ddd;
+                  padding: 5px 10px;
+                  border-radius: 15px;
+                  cursor: pointer;
+                  font-size: 12px;
+                `;
+                actionButton.onclick = () => {
+                  chatInput.value = action;
+                  sendMessage();
+                };
+                actionsDiv.appendChild(actionButton);
+              });
+              
+              messages.appendChild(actionsDiv);
+            }
+            
+            messages.scrollTop = messages.scrollHeight;
+            break;
+            
           case 'system_message':
             if (!allowedMessages.includes(data.message)) break;
             isRunActive = true;
@@ -438,7 +493,7 @@
           type: 'user_message',
           message: message,
           threadId: threadId,
-          store_id: storeId, // Add store_id from global variable
+          storeId: storeId, // Add store_id from global variable
           userInfo: userInfo
         }));
       }
@@ -485,6 +540,18 @@
         border-radius: 8px;
       `;
 
+      // Add mandatory phone number input
+      const phoneInput = document.createElement('input');
+      phoneInput.type = 'tel';
+      phoneInput.placeholder = "Enter your phone number";
+      phoneInput.required = true;
+      phoneInput.style.cssText = `
+        width: 80%;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+      `;
+
       const submitBtn = document.createElement('button');
       submitBtn.innerText = "Start Chatting";
       submitBtn.style.cssText = `
@@ -506,11 +573,12 @@
         margin-top: 10px;
       `;
       infoText.innerHTML = `
-        We use your email to provide personalized shopping experiences, including:<br><br>
+        We use your information to provide personalized shopping experiences, including:<br><br>
         • New customer discounts<br>
         • Special offers for returning customers<br>
         • Order updates and tracking<br>
-        • Personalized product recommendations<br><br>
+        • Personalized product recommendations<br>
+        • SMS notifications for urgent updates<br><br>
         If our AI assistant can't fully address your query and our team is offline, we'll email you a response as soon as possible.
       `;
 
@@ -520,12 +588,16 @@
           .map(word => word.toLowerCase().replace(/^\w/, c => c.toUpperCase()))
           .join(' ');
         const email = emailInput.value.trim();
-        if (!name || !email) {
-          alert("Please enter your name and email to start chatting.");
+        const phone = phoneInput.value.trim();
+        
+        if (!name || !email || !phone) {
+          alert("Please enter your name, email, and phone number to start chatting.");
           return;
         }
-        localStorage.setItem('lynk_chat_user', JSON.stringify({ name, email }));
-        userInfo = { name, email };  // 🔥 Update in memory too
+        
+        // Store user info with phone number
+        localStorage.setItem('lynk_chat_user', JSON.stringify({ name, email, phone }));
+        userInfo = { name, email, phone };  // 🔥 Update in memory too
         contentArea.innerHTML = ''; // reset inside scroll area
         contentArea.appendChild(messages);
         contentArea.appendChild(bottomContainer);
@@ -534,6 +606,7 @@
 
       formWrapper.appendChild(nameInput);
       formWrapper.appendChild(emailInput);
+      formWrapper.appendChild(phoneInput);  // Add phone input to form
       formWrapper.appendChild(submitBtn);
       formWrapper.appendChild(infoText);
 

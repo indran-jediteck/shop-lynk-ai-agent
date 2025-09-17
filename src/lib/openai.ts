@@ -437,9 +437,9 @@ export class OpenAIService {
     return this.threads.get(threadId)!;
   }
 
-  public async createThreadWithContext(userInfo: { name: string; email: string }): Promise<string> {
+  public async createThreadWithContext(userInfo: { name: string; email: string; phone: string }): Promise<string> {
     const thread = await this.client.beta.threads.create();
-    const systemMessage = `New session started for user with first name ${userInfo.name} and email (${userInfo.email})`;
+    const systemMessage = `New session started for user with first name ${userInfo.name}, email (${userInfo.email}), and phone (${userInfo.phone})`;
     console.log('System message:', systemMessage);
     await this.client.beta.threads.messages.create(thread.id, {
       role: 'assistant',
@@ -450,7 +450,7 @@ export class OpenAIService {
   }
 
   // Cache assistant_id per store
-  private async getStoreAssistant(store_id: string): Promise<string> {
+  public async getStoreAssistant(store_id: string): Promise<string> {
     // Check cache first
     if (this.assistantCache.has(store_id)) {
       return this.assistantCache.get(store_id)!;

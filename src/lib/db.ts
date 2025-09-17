@@ -33,6 +33,7 @@ const messageSchema = new mongoose.Schema({
 const browserThreadSchema = new mongoose.Schema({
   email: { type: String, required: true },
   name: { type: String, required: true },
+  phone: { type: String, required: true },
   browserId: { type: String, required: true },
   threadId: { type: String, required: true },
   timestamp: { type: Date, default: Date.now }
@@ -77,8 +78,8 @@ export async function connectToDatabase() {
   }
 }
 
-export async function getAssistantById(assistantDbId: string) {
-  return Assistant.findOne({ _id: new mongoose.Types.ObjectId(assistantDbId) });
+export async function getAssistantById(openaiAssistantId: string) {
+  return Assistant.findOne({ assistantId: openaiAssistantId });
 }
 
 
@@ -96,12 +97,13 @@ export async function saveMessage(email: string, content: string, from: string) 
 }
 
 // Add this function to store thread info
-export async function storeBrowserThread(email: string, name: string, browserId: string, threadId: string) {
+export async function storeBrowserThread(email: string, name: string, phone: string, browserId: string, threadId: string) {
   return BrowserThread.findOneAndUpdate(
     { email }, // find by email
     { 
       email,
       name,
+      phone, // Add this
       browserId,
       threadId,
       timestamp: new Date() // update timestamp on each update
