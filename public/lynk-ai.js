@@ -28,7 +28,7 @@
       localStorage.setItem('lynk_browser_id', browserId);
     }
     const script = document.querySelector('script[src*="lynk-ai.js"]');
-    const storeId = script?.dataset?.storeId || window.location.hostname;
+    const storeId = script?.dataset?.storeId || 'jcsfashions' // window.location.hostname;
     console.log("🛒 Store ID:", storeId);
     let userInfo = JSON.parse(localStorage.getItem('lynk_chat_user') || '{}');
     let ws; 
