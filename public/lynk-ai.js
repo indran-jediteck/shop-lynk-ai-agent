@@ -30,7 +30,8 @@
     const script = document.querySelector('script[src*="lynk-ai.js"]');
     let storeId = script?.dataset?.storeId || window.location.hostname; // 'jcsfashions' //
     const shopDomain1 = window?.Shopify?.shop; 
-    console.log("🛒 Store ID:", shopDomain1);
+    console.log("🛒 ShopDomain1 :", shopDomain1);
+    console.log("🛒 ShopDomain :", shopDomain);
     console.log("🛒 Store ID:", storeId);
     if (storeId === 'localhost') {
       storeId = 'jcsfashions';
