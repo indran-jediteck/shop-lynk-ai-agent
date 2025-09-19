@@ -28,7 +28,13 @@
       localStorage.setItem('lynk_browser_id', browserId);
     }
     const script = document.querySelector('script[src*="lynk-ai.js"]');
-    const storeId = script?.dataset?.storeId || 'jcsfashions' // window.location.hostname;
+    let storeId = script?.dataset?.storeId || window.location.hostname; // 'jcsfashions' //
+    const shopDomain1 = window?.Shopify?.shop; 
+    console.log("🛒 Store ID:", shopDomain1);
+    console.log("🛒 Store ID:", storeId);
+    if (storeId === 'localhost') {
+      storeId = 'jcsfashions';
+    }
     console.log("🛒 Store ID:", storeId);
     let userInfo = JSON.parse(localStorage.getItem('lynk_chat_user') || '{}');
     let ws; 
