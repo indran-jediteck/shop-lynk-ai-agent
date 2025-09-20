@@ -60,7 +60,7 @@
         }
       }
     }
-    if (storeId === 'localhost') {
+    if (storeId === 'localhost' || storeId === 'onrender') {
       storeId = 'jcsfashions';
     }
     console.log("🛒 Store ID:", storeId);
