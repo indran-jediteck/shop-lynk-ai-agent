@@ -19,7 +19,6 @@
   }
 
   function initLynkChat() {
-    const shopDomain = window.location.hostname;
     let browserId = localStorage.getItem('lynk_browser_id');
     let threadId = localStorage.getItem('lynk_thread_id');
     let isRunActive = false;
@@ -28,11 +27,39 @@
       localStorage.setItem('lynk_browser_id', browserId);
     }
     const script = document.querySelector('script[src*="lynk-ai.js"]');
-    let storeId = script?.dataset?.storeId || window.location.hostname; // 'jcsfashions' //
-    const shopDomain1 = window?.Shopify?.shop; 
-    console.log("🛒 ShopDomain1 :", shopDomain1);
-    console.log("🛒 ShopDomain :", shopDomain);
+    let storeId = window.location.hostname; // 'jcsfashions' //
     console.log("🛒 Store ID:", storeId);
+    storeId = storeId.replace(/^www\./i, '');
+    // If it's not localhost or an IP, normalize & extract the center.
+    if (storeId !== 'localhost' && !/^\d{1,3}(\.\d{1,3}){3}$/.test(storeId)) {
+      // strip leading www.
+      storeId = storeId.replace(/^www\./i, '');
+
+      // Shopify backend host → take the first label ("jediteck" from "jediteck.myshopify.com")
+      const shopifyMatch = /^([^.]+)\.myshopify\.com$/i.exec(storeId);
+      if (shopifyMatch) {
+        storeId = shopifyMatch[1];
+      } else {
+        const labels = storeId.split('.');
+
+        if (labels.length <= 2) {
+          // "jcsfashions.com" → "jcsfashions"
+          storeId = labels[0];
+        } else {
+          // Handle common 2-part public suffixes ".co.uk", ".com.au", etc.
+          const TWO_PART_SUFFIXES = new Set([
+            'co.uk','com.au','co.in','com.br','co.jp','co.kr','com.mx','com.sg','com.tr','co.za',
+            'com.ar','com.co','com.my','com.ph','com.vn','com.hk','com.tw'
+          ]);
+
+          const last2 = labels.slice(-2).join('.');
+          // If 2-part suffix, take the label before those two; else take before the last
+          storeId = TWO_PART_SUFFIXES.has(last2)
+            ? labels.slice(-3, -2)[0]
+            : labels.slice(-2, -1)[0];
+        }
+      }
+    }
     if (storeId === 'localhost') {
       storeId = 'jcsfashions';
     }
