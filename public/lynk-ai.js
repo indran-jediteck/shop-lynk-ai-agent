@@ -110,8 +110,9 @@
 
     function connectWebSocket() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      //const wsUrl = `${protocol}//${window.location.host}`;
+      // const wsUrl = `${protocol}//${window.location.host}`;
       //const wsUrl = `wss://5569-2601-647-5500-6530-b50e-d9de-bd9e-48fc.ngrok-free.app`;
+      // const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
       const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
       ws = new WebSocket(wsUrl);
       console.log('Connecting to WebSocket:', wsUrl);
@@ -325,17 +326,26 @@
       boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
       zIndex: 9998,
       borderRadius: '10px',
-      overflow: 'visible', // 🔥 very important - NOT 'auto' here
+      // overflowY: 'scroll', // keep scroll behavior
+      overflow: 'hidden',
       width: '500px',
-      height: 'auto',
-      maxHeight: '90vh',
+      height: '30vh',
+      top: '20px',
+      maxHeight: '60vh',
       bottom: '90px',
       right: '20px',
+    
+      // scrollbar hiding
+      // scrollbarWidth: 'none',     // Firefox
+      // msOverflowStyle: 'none',    // IE/Edge
     });
+    
 
     const header = document.createElement('div');
     Object.assign(header.style, {
       display: 'flex',
+      position: 'sticky',
+      top: '0',
       justifyContent: 'space-between',
       alignItems: 'center',
       padding: '10px 15px',
@@ -405,12 +415,12 @@
     const contentArea = document.createElement('div'); // 🔥 ADD this wrapper
     contentArea.id = 'lynk-chat-content';
     Object.assign(contentArea.style, {
-      flex: 1,
+      // flex: 1,
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'auto', // Not scroll entire contentArea, only inside messages
+      // overflowY: 'scroll', // Not scroll entire contentArea, only inside messages
       transition: 'min-height 0.3s ease',
-      minHeight: '600px', // <-- add this line
+      minHeight: '100%', // <-- add this line
     });
 
     // Then append like this:
@@ -421,12 +431,16 @@
     const messages = document.createElement('div');
     messages.id = 'lynk-chat-messages';
     Object.assign(messages.style, {
+      backgroundColor:'#ffffff',
       flex: 1,
-      overflowY: 'auto',
+      overflow: 'scroll',
       padding: '10px',
+      paddingBottom: '50px',
       display: 'flex',
       flexDirection: 'column',
       gap: '10px',
+      scrollbarWidth: 'none',     // Firefox
+      msOverflowStyle: 'none', 
     });
 
     // --- Input area ---
@@ -474,13 +488,22 @@
     const bottomContainer = document.createElement('div');
     Object.assign(bottomContainer.style, {
       borderTop: '1px solid #eee',
+      position: 'relative',
+      backgroundColor:'#ffffff',
+      width : "100%",
+      bottom : "38px",
     });
 
     // Add powered by footer
     const poweredByFooter = document.createElement('div');
     poweredByFooter.style.cssText = `
-      padding: 8px;
+      padding: 8px 0;
+      background-color: #fff;
       text-align: center;
+      position: relative;
+      overflow: hidden;
+      width:100%;
+      bottom: 40px;
       color: #666;
       font-size: 12px;
       border-top: 1px solid #eee;
@@ -542,7 +565,8 @@
     };
     // When showing form or messages:
     function showUserInfoForm() {
-      contentArea.innerHTML = ''; // clear only inside the scrollable part
+      messages.innerHTML = ''; 
+      contentArea.removeChild(bottomContainer);// clear only inside the scrollable part
 
       const formWrapper = document.createElement('div');
       formWrapper.style.cssText = `
@@ -550,6 +574,7 @@
         display: flex;
         flex-direction: column;
         justify-content: center;
+        
         align-items: center;
         gap: 15px;
         padding: 20px;
@@ -633,8 +658,10 @@
         localStorage.setItem('lynk_chat_user', JSON.stringify({ name, email, phone }));
         userInfo = { name, email, phone };  // 🔥 Update in memory too
         contentArea.innerHTML = ''; // reset inside scroll area
+        messages.removeChild(formWrapper);
         contentArea.appendChild(messages);
         contentArea.appendChild(bottomContainer);
+        contentArea.appendChild(poweredByFooter);
         connectWebSocket();
       };
 
@@ -644,7 +671,7 @@
       formWrapper.appendChild(submitBtn);
       formWrapper.appendChild(infoText);
 
-      contentArea.appendChild(formWrapper);
+      messages.appendChild(formWrapper);
       contentArea.appendChild(poweredByFooter);
       //contentArea.appendChild(bottomContainer); // Add the bottom container with input and footer
     }

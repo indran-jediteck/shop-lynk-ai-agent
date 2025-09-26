@@ -296,7 +296,7 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
       threadId,
       responseLength: response.length
     });
-
+     console.log('Assistant response:', response);
     // Send assistant response to Discord without awaiting
     sendToDiscord(response, 'Assistant', threadId, message.userInfo, discordWebhookUrl);
 

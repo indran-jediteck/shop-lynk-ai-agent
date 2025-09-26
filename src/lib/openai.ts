@@ -45,7 +45,6 @@ async function getEmbedding(text: string): Promise<number[]> {
 
 export async function vectorProductSearch(searchParams: SearchParams & { store_id: string }) {
   const { search_query, filters, store_id } = searchParams;
-
   const embedding = await getEmbedding(search_query);
 
   const pinecone = new Pinecone({
@@ -213,6 +212,8 @@ export class OpenAIService {
   private async handleToolCalls(threadId: string, runId: string, toolCalls: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[]): Promise<void> {
     const toolOutputs = [];
 
+    console.log('Processing all tool calls:', toolCalls);
+
     for (const toolCall of toolCalls) {
       console.log('Processing tool call:', toolCall);
       console.log('Function name:', toolCall.function.name);
@@ -286,6 +287,22 @@ export class OpenAIService {
           store_id: args.store_id 
         });
       
+      
+      
+        toolOutputs.push({
+          tool_call_id: toolCall.id,
+          output: JSON.stringify(result)
+        });
+      }
+
+      if (toolCall.function.name === 'add_to_cart') {
+        const args = JSON.parse(toolCall.function.arguments);
+        const result = await this.handleAddToCart({ 
+          variant_id: args.variant_id, 
+          quantity: args.quantity, 
+          cart_id: args.cart_id, 
+          store_id: args.store_id 
+        }); 
         toolOutputs.push({
           tool_call_id: toolCall.id,
           output: JSON.stringify(result)
@@ -567,4 +584,130 @@ export class OpenAIService {
       throw err;
     }
   }
+
+  private async handleAddToCart(args: { 
+    variant_id: string;   // product variant ID (not product ID!)
+    quantity?: number;
+    product_name?: string;
+    color?: string;
+    cart_id?: string;     // optional, create new cart if not provided
+    store_id?: string; 
+  }) {
+    const { variant_id, quantity = 1, cart_id, store_id, product_name } = args;
+  
+    // Use store-specific config if store_id provided, otherwise fallback
+    let shopifyDomain: string;
+    let accessToken: string;
+  
+    if (store_id) {
+      const store = await this.getStoreConfig(store_id);
+      shopifyDomain = store.shopify_domain;
+      accessToken = store.access_token;
+    } else {
+      shopifyDomain = process.env.cust_store_name!;
+      accessToken = process.env.cust_access_token!;
+    }
+  
+    console.log('Shopify domain:', shopifyDomain);
+    console.log('Access token:', accessToken);
+    console.log('Variant ID:', variant_id);
+    console.log('Cart ID:', cart_id || 'new cart');
+  
+    if (!shopifyDomain || !accessToken) {
+      throw new Error("Missing Shopify credentials.");
+    }
+  
+    try {
+      const apiUrl = `https://${shopifyDomain}/api/2025-01/graphql.json`;
+  
+      // 1. If no cart_id provided → create a new cart
+      let targetCartId = cart_id;
+      if (!targetCartId) {
+        const createCartMutation = `
+          mutation {
+            cartCreate {
+              cart { id checkoutUrl }
+            }
+          }
+        `;
+        const createRes = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Storefront-Access-Token": accessToken,
+          },
+          body: JSON.stringify({ query: createCartMutation }),
+        });
+  
+        const createData = await createRes.json();
+        targetCartId = createData.data.cartCreate.cart.id;
+      }
+  
+      // 2. Add product variant to cart
+      const addMutation = `
+        mutation cartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!) {
+          cartLinesAdd(cartId: $cartId, lines: $lines) {
+            cart {
+              id
+              checkoutUrl
+              lines(first: 10) {
+                edges {
+                  node {
+                    id
+                    quantity
+                    merchandise {
+                      ... on ProductVariant {
+                        id
+                        title
+                        product { title }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            userErrors { field message }
+          }
+        }
+      `;
+  
+      const variables = {
+        cartId: targetCartId,
+        lines: [{ merchandiseId: variant_id, quantity }],
+      };
+  
+      const addRes = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Storefront-Access-Token": accessToken,
+        },
+        body: JSON.stringify({ query: addMutation, variables }),
+      });
+  
+      const addData = await addRes.json();
+  
+      if (addData.errors || addData.data.cartLinesAdd.userErrors.length > 0) {
+        throw new Error(JSON.stringify(addData.errors || addData.data.cartLinesAdd.userErrors));
+      }
+  
+      const cart = addData.data.cartLinesAdd.cart;
+      return {
+        cart_id: cart.id,
+        checkout_url: cart.checkoutUrl,
+        items: cart.lines.edges.map((e: any) => ({
+          line_id: e.node.id,
+          variant_id: e.node.merchandise.id,
+          product_title: e.node.merchandise.product.title,
+          variant_title: e.node.merchandise.title,
+          quantity: e.node.quantity,
+        })),
+      };
+    } catch (err) {
+      console.error("Cart add failed:", err);
+      throw err;
+    }
+  }
+  
+
 }

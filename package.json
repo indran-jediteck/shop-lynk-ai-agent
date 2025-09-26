@@ -5,8 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "start": "node dist/server.js & node dist/api/discord-bot.js",
-    "dev:server": "nodemon --watch 'src/**/*.ts' --exec 'ts-node src/server.ts'",
-    "dev:bot": "nodemon --watch 'src/**/*.ts' --exec 'ts-node src/api/discord-bot.ts'",
+    "dev:server": "nodemon --watch \"src/**/*.ts\" --exec \"ts-node src/server.ts\"",
+    "dev:bot": "nodemon --watch \"src/**/*.ts\" --exec \"ts-node src/api/discord-bot.ts\"",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:bot\"",
     "build": "tsc",
     "render-build": "chmod +x build.sh && ./build.sh",

@@ -753,6 +753,89 @@ router.post('/test_create_assistant', async (req, res) => {
 });
 
 
+// router.get('/add_tool_function_in_assistant/:assistantId', async (req, res) => {
+//   const { assistantId } = req.params;
+//   try {
+//     const assistant = await Openai.beta.assistants.update(assistantId, {
+//       tools: [
+//         { type: "file_search" },
+//         {
+//           type: "function",
+//           function: {
+//             name: "vector_search",
+//             description: "search for product in the store, user can ask this type like i want a product of this quantityh and material and many ore details , if user ask any query related to store so answer then and call this function Perform a semantic vector search over stored documents.",
+//             parameters: {
+//               type: "object",
+//               properties: {
+//                 search_query: { type: "string", description: "The text to search for" },
+//                 store_id: { 
+//                   type: "string", 
+//                   description: "Vector store to search in.strictly Always use **'jcsfashions'**.",
+//                   enum: ["jcsfashions"]   // enforce the value
+//                 },
+//                 filters: { 
+//                   type: "object", 
+//                   description: "Optional filters for narrowing search results" 
+//                 }
+//               },
+//               required: ["search_query", "store_id"]
+//             }
+//           }
+//         },
+//         {
+//           type: "function",
+//           function: {
+//             name: "add_to_cart",
+//             description: "when a user ask for like i want to add product in the cart and user can also ask add the first product in the cart which get in previos chat so also get the previous context and call this function with product details and also user ask with name of the product and say add to cart Add a product to the cart with details like product name, quantity, and color.",
+//             parameters: {
+//               type: "object",
+//               properties: {
+//                 product_name: { type: "string", description: "Name of the product" },
+//                 store_id: { 
+//                   type: "string", 
+//                   description: "Vector store to search in. strictly Always use 'shopgptapp'.",
+//                   enum: ["shopgptapp"]   // enforce the value
+//                 },
+//                 quantity: { type: "integer", description: "Number of items to add" },
+//                 color: { type: "string", description: "Color of the product if specified" }
+//               },
+//               required: ["product_name", "quantity"]
+//             }
+//           }
+//         },
+//         {
+//           type: "function",
+//           function: {
+//             name: "remove_from_cart",
+//             description: "when a user ask for like i want to remove product from the cart and user can also ask remove the first product from the cart which get in previos chat so also get the previous context and call this function with product details and also user ask with name of the product and say remove from cart Remove a product from the cart with details like product name, quantity, and color.",
+//             parameters: {
+//               type: "object",
+//               properties: {
+//                 store_id: { 
+//                   type: "string", 
+//                   description: "Vector store to search in. Always use 'shopgptapp'.",
+//                   enum: ["shopgptapp"]   // enforce the value
+//                 },
+//                 product_name: { type: "string", description: "Name of the product" },
+//                 quantity: { type: "integer", description: "Number of items to remove" },
+//                 color: { type: "string", description: "Color of the product if specified" }
+//               },
+//               required: ["product_name"]
+//             }
+//           }
+//         }
+//       ]
+//     });
+
+//     res.json({ message: 'Tool functions added to assistant', assistant });
+//   } catch (error) {
+//     console.error('Error adding tool functions to assistant:', error);
+//     res.status(500).json({ error: 'Failed to add tool functions to assistant' });
+//   }
+// });
+
+
+
 export const crawlonly = async (startUrl: string) => {
   const visited = new Set<string>();
   const MAX_PAGES = 100;
