@@ -61,7 +61,7 @@
       }
     }
     if (storeId === 'localhost' || storeId === 'onrender') {
-      storeId = 'jcsfashions';
+      storeId = 'shopgptapp';
     }
     console.log("🛒 Store ID:", storeId);
     let userInfo = JSON.parse(localStorage.getItem('lynk_chat_user') || '{}');
@@ -686,7 +686,7 @@
       } else {
         modal.style.width = '500px';
         modal.style.maxHeight = '90vh';
-        modal.style.height = 'auto';
+        modal.style.height = '90vh';
         modal.style.bottom = '90px';
         modal.style.right = '20px';
         modal.style.borderRadius = '10px';
