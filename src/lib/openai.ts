@@ -8,11 +8,11 @@ dotenv.config();
 interface SearchParams {
   search_query: string;
   store_id: string;
-  filters: {
-    category: string;
-    price_range: { min: number; max: number };
-    availability: 'in_stock' | 'out_of_stock';
-  };
+  // filters: {
+  //   category: string;
+  //   price_range: { min: number; max: number };
+  //   availability: 'in_stock' | 'out_of_stock';
+  // };
 }
 
 const openai = new OpenAI({
@@ -44,7 +44,7 @@ async function getEmbedding(text: string): Promise<number[]> {
 }
 
 export async function vectorProductSearch(searchParams: SearchParams & { store_id: string }) {
-  const { search_query, filters, store_id } = searchParams;
+  const { search_query, store_id } = searchParams;
   const embedding = await getEmbedding(search_query);
 
   const pinecone = new Pinecone({
@@ -192,12 +192,12 @@ export class OpenAIService {
     try {
       const searchParams = {
         search_query: args.search_query,
-        store_id: args.store_id,
-        filters: args.filters || {
-          category: 'general',
-          price_range: { min: 0, max: 1000 },
-          availability: 'in_stock'
-        }
+        store_id: args.store_id
+        // filters: args.filters || {
+        //   category: 'general',
+        //   price_range: { min: 0, max: 1000 },
+        //   availability: 'in_stock'
+        // }
       };
 
       console.log('Vector search params:', searchParams);
@@ -254,15 +254,15 @@ export class OpenAIService {
           });
         }
       }
-      if (toolCall.function.name === 'vector_search') {
+      if (toolCall.function.name === 'vectorSearch') {
         try {
           const args = JSON.parse(toolCall.function.arguments);
           console.log('Vector search arguments:', args);
           
           const result = await this.handleVectorSearch({
-            search_query: args.search_query,
-            store_id: args.store_id,
-            filters: args.filters
+            search_query: args.query,
+            store_id: 'jcrmtest',
+            // filters: args.filters
           });
           
           toolOutputs.push({

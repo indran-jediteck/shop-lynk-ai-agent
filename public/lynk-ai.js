@@ -61,7 +61,7 @@
       }
     }
     if (storeId === 'localhost' || storeId === 'onrender') {
-      storeId = 'shopgptapp';
+      storeId = 'jcrmtest';
     }
     console.log("🛒 Store ID:", storeId);
     let userInfo = JSON.parse(localStorage.getItem('lynk_chat_user') || '{}');
@@ -110,10 +110,10 @@
 
     function connectWebSocket() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      // const wsUrl = `${protocol}//${window.location.host}`;
+      const wsUrl = `${protocol}//${window.location.host}`;
       //const wsUrl = `wss://5569-2601-647-5500-6530-b50e-d9de-bd9e-48fc.ngrok-free.app`;
       // const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
-      const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
+      // const wsUrl = `wss://shop-lynk-ai-agent.onrender.com`;
       ws = new WebSocket(wsUrl);
       console.log('Connecting to WebSocket:', wsUrl);
 
