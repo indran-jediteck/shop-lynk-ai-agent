@@ -60,9 +60,12 @@
         }
       }
     }
-    if (storeId === 'localhost' || storeId === 'onrender' || storeId === 'trycloudflare') {
+    if (storeId === 'localhost' || storeId === 'onrender' ) {
       storeId = 'jcsfashions';
+    } else if (storeId === 'trycloudflare') {
+      storeId = 'jcrmtest';
     }
+
     console.log("🛒 Store ID:", storeId);
     let userInfo = JSON.parse(localStorage.getItem('lynk_chat_user') || '{}');
     let ws; 
