@@ -63,6 +63,7 @@
     if (storeId === 'localhost' || storeId === 'onrender') {
       storeId = 'jcrmtest';
     }
+
     console.log("🛒 Store ID:", storeId);
     let userInfo = JSON.parse(localStorage.getItem('lynk_chat_user') || '{}');
     let ws; 
@@ -508,7 +509,7 @@
       font-size: 12px;
       border-top: 1px solid #eee;
     `;
-    poweredByFooter.innerHTML = 'Powered by <a href="https://jediteck.com" target="_blank" style="color: #5C6AC4; text-decoration: none;">Lynk AI / JediTeck</a>';
+    poweredByFooter.innerHTML = 'Powered by <a href="https://jediteck.com" target="_blank" style="color: #5C6AC4; text-decoration: none;">Lynk AI / JediTeck</a> ver 2.1';
 
     // Correct order of elements
     bottomContainer.appendChild(inputWrapper);
