@@ -60,7 +60,7 @@
         }
       }
     }
-    if (storeId === 'localhost' || storeId === 'onrender') {
+    if (storeId === 'localhost' || storeId === 'onrender' || storeId === 'trycloudflare') {
       storeId = 'jcsfashions';
     }
     console.log("🛒 Store ID:", storeId);
