@@ -3,6 +3,7 @@ import { WebSocket as WS } from 'ws';
 export interface InitMessage {
   type: 'init';
   browserId: string;
+  message : string
   threadId?: string;
   assistantDbId: string;
   assistantId: string;

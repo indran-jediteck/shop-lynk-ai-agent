@@ -2,7 +2,7 @@ import { Router } from 'express';
 import axios from 'axios';
 //import { generateText } from 'ai';
 //import { openai } from '@ai-sdk/openai';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import * as cheerio from 'cheerio'; 
 import openai from "openai";
 import { Readable } from 'stream';
@@ -753,86 +753,271 @@ router.post('/test_create_assistant', async (req, res) => {
 });
 
 
-// router.get('/add_tool_function_in_assistant/:assistantId', async (req, res) => {
-//   const { assistantId } = req.params;
-//   try {
-//     const assistant = await Openai.beta.assistants.update(assistantId, {
-//       tools: [
-//         { type: "file_search" },
-//         {
-//           type: "function",
-//           function: {
-//             name: "vector_search",
-//             description: "search for product in the store, user can ask this type like i want a product of this quantityh and material and many ore details , if user ask any query related to store so answer then and call this function Perform a semantic vector search over stored documents.",
-//             parameters: {
-//               type: "object",
-//               properties: {
-//                 search_query: { type: "string", description: "The text to search for" },
-//                 store_id: { 
-//                   type: "string", 
-//                   description: "Vector store to search in.strictly Always use **'jcsfashions'**.",
-//                   enum: ["jcsfashions"]   // enforce the value
-//                 },
-//                 filters: { 
-//                   type: "object", 
-//                   description: "Optional filters for narrowing search results" 
-//                 }
-//               },
-//               required: ["search_query", "store_id"]
-//             }
-//           }
-//         },
-//         {
-//           type: "function",
-//           function: {
-//             name: "add_to_cart",
-//             description: "when a user ask for like i want to add product in the cart and user can also ask add the first product in the cart which get in previos chat so also get the previous context and call this function with product details and also user ask with name of the product and say add to cart Add a product to the cart with details like product name, quantity, and color.",
-//             parameters: {
-//               type: "object",
-//               properties: {
-//                 product_name: { type: "string", description: "Name of the product" },
-//                 store_id: { 
-//                   type: "string", 
-//                   description: "Vector store to search in. strictly Always use 'shopgptapp'.",
-//                   enum: ["shopgptapp"]   // enforce the value
-//                 },
-//                 quantity: { type: "integer", description: "Number of items to add" },
-//                 color: { type: "string", description: "Color of the product if specified" }
-//               },
-//               required: ["product_name", "quantity"]
-//             }
-//           }
-//         },
-//         {
-//           type: "function",
-//           function: {
-//             name: "remove_from_cart",
-//             description: "when a user ask for like i want to remove product from the cart and user can also ask remove the first product from the cart which get in previos chat so also get the previous context and call this function with product details and also user ask with name of the product and say remove from cart Remove a product from the cart with details like product name, quantity, and color.",
-//             parameters: {
-//               type: "object",
-//               properties: {
-//                 store_id: { 
-//                   type: "string", 
-//                   description: "Vector store to search in. Always use 'shopgptapp'.",
-//                   enum: ["shopgptapp"]   // enforce the value
-//                 },
-//                 product_name: { type: "string", description: "Name of the product" },
-//                 quantity: { type: "integer", description: "Number of items to remove" },
-//                 color: { type: "string", description: "Color of the product if specified" }
-//               },
-//               required: ["product_name"]
-//             }
-//           }
-//         }
-//       ]
-//     });
+router.get('/add_tool_function_in_assistant/:assistantId', async (req, res) => {
+  const { assistantId } = req.params;
+  try {
+    const assistant = await Openai.beta.assistants.update(assistantId, {
+      tools: [
+        { type: "file_search" },
+        {
+          type: "function",
+          function: {
+            name: "vector_search",
+            description: "search for product in the store, user can ask this type like i want a product of this quantityh and material and many ore details , if user ask any query related to store so answer then and call this function Perform a semantic vector search over stored documents.",
+            parameters: {
+              type: "object",
+              properties: {
+                search_query: { type: "string", description: "The text to search for" },
 
-//     res.json({ message: 'Tool functions added to assistant', assistant });
-//   } catch (error) {
-//     console.error('Error adding tool functions to assistant:', error);
-//     res.status(500).json({ error: 'Failed to add tool functions to assistant' });
-//   }
-// });
+                filters: { 
+                  type: "object", 
+                  description: "Optional filters for narrowing search results" 
+                }
+              },
+              required: ["search_query"]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "add_to_cart",
+            "description": "Add one or more products to the customer's cart (creates a Draft Order The assistant may pass a single item or multiple items. If product_name is provided instead of variant_id, backend should resolve variant_id by name (if possible).",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "description": "List of items to add. Each item should include a variant_id (preferred) or product_name plus a quantity.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "variant_id": { "type": "string", "description": "Numeric variant id" },
+                      "product_name": { "type": "string", "description": "Human readable product name (backend will attempt to resolve variant_id if variant_id not provided)" },
+                      "quantity": { "type": "integer", "description": "Quantity to add", "minimum": 1 },
+                      "properties": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Optional line-item properties (e.g., color: 'blue')" }
+                    },
+                    
+                    "required": ["variant_id", "quantity"],
+                      
+                    
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": ["items"]
+            }
+          }
+        },
+        
+        {
+          type: "function",
+          function: {
+            name: "remove_from_cart",
+            description: "when a user ask for like i want to remove product from the cart and user can also ask remove the first product from the cart which get in previos chat so also get the previous context and call this function with product details and also user ask with name of the product and say remove from cart Remove a product from the cart with details like product name, quantity, and color.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "description": "List of items to remove. Each item should include a variant_id (preferred) or product_name plus a quantity.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "variant_id": { "type": "string", "description": "Numeric variant id" },
+                      "product_name": { "type": "string", "description": "Human readable product name (backend will attempt to resolve variant_id if variant_id not provided)" },
+                      "quantity": { "type": "integer", "description": "Quantity to remove", "minimum": 1 },
+                      "properties": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Optional line-item properties (e.g., color: 'blue')" }
+                    },
+                    
+                    "required": ["variant_id", "quantity"],
+                      
+                    
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": ["items"]
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "greet_user",
+            description: `Call this function when user sends a greeting message (like "hi", "hello", "hey") or when starting a new conversation. 
+            
+            This function will:
+            1. Check if user has an existing draft order (items in cart)
+            2. If no cart, check for their last fulfilled order
+            3. Return data so you can create a personalized greeting message
+            
+            Based on the response:
+            - If 'has_cart' is true: Welcome them back, mention the items in their cart, ask if they want to checkout or browse more
+            - If 'has_last_order' is true: Welcome them back, mention their last purchase, suggest related/complementary products (e.g., if they bought a mobile, suggest tempered glass, mobile cover), and offer to show latest collections
+            - If both false: Greet them with exitments with name and professionally, offer to help them explore products or assist with their needs how can i assist you`,
+            parameters: {
+              type: "object",
+              properties: {},
+              required: []
+            }
+          }
+        }
+      ]
+    });
+
+    res.json({ message: 'Tool functions added to assistant', assistant });
+  } catch (error) {
+    console.error('Error adding tool functions to assistant:', error);
+    res.status(500).json({ error: 'Failed to add tool functions to assistant' });
+  }
+});
+
+router.post('/chats', async (req, res) => {
+  const { assistantId, message, sender, userInfo, browserId, threadId, storeId } = req.body;
+
+  try {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) throw new Error("MONGODB_URI is not set");
+
+    const client = new MongoClient(mongoUri);
+    await client.connect();
+
+    const db = client.db();
+    const collection = db.collection("ShopifyApp_Chats");
+
+    const userEmail = userInfo?.email;
+    if (!userEmail) {
+      await client.close();
+      return res.status(400).json({ error: "userInfo.email is required" });
+    }
+
+    const now = new Date();
+
+    const newMessage = {
+      _id: new ObjectId(),
+      text: message,
+      sender,
+      clientInfo: {
+        userInfo,
+        browserId,
+        threadId,
+      },
+      timestamp: now.toISOString(),
+    };
+
+    const filter = {
+      userEmail,
+      assistantId,
+      storeId
+    };
+
+    const update = {
+      $push: { messages: newMessage },
+      $setOnInsert: {
+        createdAt: now,
+        userEmail,
+        assistantId,
+        storeId,
+        // REMOVED: messages: [] - Let $push handle array creation
+      },
+      $set: {
+        updatedAt: now  // Optional: Track last update time
+      }
+    };
+
+    const options = { upsert: true, returnDocument: "after" as const };
+
+    const result = await collection.findOneAndUpdate(filter, update as any, options);
+
+    await client.close();
+
+    res.json({
+      success: true,
+      message: "Chat message upserted successfully",
+      data: result,
+      message_id : newMessage._id  // Changed from result.value (result itself contains the document)
+    });
+
+  } catch (error: any) {
+    console.error("Error upserting chat:", error);
+    res.status(500).json({ error: "Failed to upsert chat", details: error.message });
+  }
+});
+
+
+router.post('/feedback', async (req, res) => {
+  const { type, message_id, userInfo, assistantId } = req.body;
+
+  try {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) throw new Error("MONGODB_URI is not set");
+
+    const client = new MongoClient(mongoUri);
+    await client.connect();
+
+    const db = client.db();
+    const collection = db.collection("ShopifyApp_Chats");
+
+    const userEmail = userInfo?.email;
+    if (!userEmail) {
+      await client.close();
+      return res.status(400).json({ error: "userInfo.email is required" });
+    }
+
+    const liked = type === "like" ? true : type === "dislike" ? false : null;
+    if (liked === null) {
+      await client.close();
+      return res.status(400).json({ error: "Invalid type. Must be 'like' or 'dislike'." });
+    }
+
+    const chatDoc = await collection.findOne({ assistantId, userEmail });
+    if (!chatDoc) {
+      await client.close();
+      return res.status(404).json({ error: "Chat not found for given assistantId and userEmail" });
+    }
+
+    // Check if message with the given _id exists
+    const targetMessage = chatDoc.messages?.find((msg: any) =>
+      msg._id.toString() === message_id
+    );
+
+    if (!targetMessage) {
+      await client.close();
+      return res.status(404).json({ error: "Message not found in chat" });
+    }
+
+    // Prepare update object
+    const update = {
+      $set: { "messages.$.liked": liked },
+      $inc: liked ? { totalLikes: 1 } : { totalDislikes: 1 },
+    };
+
+    const updateResult = await collection.updateOne(
+      {
+        _id: chatDoc._id,
+        "messages._id": new ObjectId(message_id),
+      },
+      update
+    );
+
+    await client.close();
+
+    if (updateResult.modifiedCount === 0) {
+      return res.status(500).json({ error: "Failed to update the message feedback" });
+    }
+
+    return res.json({
+      success: true,
+      message: `Message ${liked ? 'liked' : 'disliked'} successfully`,
+    });
+
+  } catch (error: any) {
+    console.error("Error updating feedback:", error);
+    res.status(500).json({ error: "Failed to update feedback", details: error.message });
+  }
+});
+
 
 
 

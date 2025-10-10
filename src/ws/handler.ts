@@ -6,6 +6,7 @@ import { processUserMessage, OpenAIService } from '../lib/openai';
 import dotenv from 'dotenv';
 import { getAssistantById, storeBrowserThread, BrowserThread } from '../lib/db';
 import { ObjectId } from 'mongodb';
+import { getCustomerLastPurchase } from '../lib/shopify';
 
 dotenv.config();
 
@@ -172,10 +173,45 @@ async function handleInit(ws: WebSocket, message: InitMessage) {
     message: 'Connection established'
   }));
 
+
   const firstName = message.userInfo.name.split(' ')[0] || 'there';
+  let welcomeMessage = assistantCollection?.settings?.welcome_message || "I'm your AI assistant. How can I help you today?";
+  // try {
+  //   const lastPurchase = await getCustomerLastPurchase(message.userInfo.email, message.storeId);
+    
+  //   console.log('Last purchase:', JSON.stringify(lastPurchase, null, 2)); // Debug log
+    
+  //   if (lastPurchase) {
+  //     // Check if line_items exists and has items
+  //     if (lastPurchase.line_items && Array.isArray(lastPurchase.line_items) && lastPurchase.line_items.length > 0) {
+  //       const productName = lastPurchase.line_items[0].title;
+  //       const orderDate = new Date(lastPurchase.created_at).toLocaleDateString('en-US', {
+  //         month: 'long',
+  //         day: 'numeric',
+  //         year: 'numeric'
+  //       });
+        
+  //       welcomeMessage = `Welcome back! I see your recently purchased "${productName}" on ${orderDate}. I hope you're enjoying it! How may I assist you today?`;
+  //     } else {
+  //       // Has order but no line items data
+  //       console.log('Order found but no line_items:', lastPurchase);
+  //       welcomeMessage = `Welcome back! Thank you for your recent purchase. How may I assist you today?`;
+  //     }
+  //   } else {
+  //     welcomeMessage = `Hello! Welcome to our store. How may I assist you today?`;
+  //   }
+  // } catch (error) {
+  //   console.error('Error fetching customer purchase:', error);
+  //   // welcomeMessage = `Hello! How may I assist you today?`;
+  // }
+
+
+  const response = await processUserMessage(message.threadId, message.message,message.storeId,message.userInfo, assistantId);
+  console.log(response,"openairesponseeeee")
+
   ws.send(JSON.stringify({
     type: 'init_message',
-    message: `Hi ${firstName}! 👋 ${assistantCollection?.settings?.welcome_message || "I'm your AI assistant. How can I help you today?"}`,
+    message: response,
     sender: 'bot',
     browserId: message.browserId,
     threadId: message.threadId,
@@ -194,9 +230,10 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
     type: message.type,
     threadId: message.threadId,
     userInfo: message.userInfo,
-    messageLength: message.message.length
+    messageLength: message.message.length,
+    storeId: message.storeId
   });
-
+  
   let threadId = message.threadId;
 
   if (!threadId) {
@@ -249,7 +286,6 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
     }));
     return;
   }
-
   // Add validation before using assistantId
   if (!assistantId) {
     console.error('assistantId is undefined');
@@ -260,6 +296,34 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
     }));
     return;
   }
+  fetch(`${process.env.HOST_URL}/api/agents/chats`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      assistantId,
+      message : message.message,
+      sender: 'user',
+      userInfo : message.userInfo,
+      browserId : message.browserId,
+      threadId,
+      storeId : message.storeId,
+    }),
+  })
+  .then((response) => {
+    if (!response.ok) {
+      throw new Error('Network response was not ok');
+    }
+    return response.json();
+  })
+  .then((data) => {
+    console.log('Chat message upserted successfully:');
+  })
+  .catch((error) => {
+    console.error('Error upserting chat:', error);
+  });
+
 
   // console.log('Assistant collection:', assistantCollection);
   const discordWebhookUrl = assistantCollection?.discordWebhookUrl || process.env.DISCORD_WEBHOOK_URL;
@@ -291,7 +355,7 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
       message: message.message,
       assistantId
     });
-    const response = await processUserMessage(threadId, message.message, assistantId);
+    const response = await processUserMessage(threadId, message.message,message.storeId,message.userInfo, assistantId);
     console.log('OpenAI response received:', {
       threadId,
       responseLength: response.length
@@ -299,14 +363,46 @@ async function handleUserMessage(ws: WebSocket, message: UserMessage) {
      console.log('Assistant response:', response);
     // Send assistant response to Discord without awaiting
     sendToDiscord(response, 'Assistant', threadId, message.userInfo, discordWebhookUrl);
+    let message_id;
+    await fetch(`${process.env.HOST_URL}/api/agents/chats`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        assistantId,
+        message : response,
+        sender: 'bot',
+        userInfo : message.userInfo,
+        browserId : message.browserId,
+        threadId,
+        storeId : message.storeId,
+      }),
+    })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      return response.json();
+    }).then((data) => {
+      message_id = data.message_id;
+    })
+    .catch((error) => {
+      console.error('Error upserting chat:', error);
+    });
 
     // Send response to user
     ws.send(JSON.stringify({
       type: 'new_message',
       message: response,
       sender: 'bot',
-      threadId: threadId
+      threadId: threadId,
+      assistantId : assistantId,
+      userInfo : message.userInfo,
+      message_id : message_id
     }));
+    
+  
   } catch (error) {
     console.error('Error in handleUserMessage:', error);
     
